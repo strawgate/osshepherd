@@ -131,32 +131,35 @@ async function handleOAuthLogin() {
 }
 
 // ============================================================
-// Offscreen Document Management
+// CodeRabbit Bridge: Open WS from CodeRabbit's own domain
 // ============================================================
-let creating;
-async function setupOffscreenDocument(path) {
-  const offscreenUrl = chrome.runtime.getURL(path);
-  const matchedClients = await self.clients.matchAll();
-  for (const client of matchedClients) {
-    if (client.url === offscreenUrl) return;
+// By injecting a content script into app.coderabbit.ai, the browser
+// automatically includes CodeRabbit's session cookies with the WebSocket
+// handshake to ide.coderabbit.ai. This bypasses Cloud Armor's requirement
+// for the Authorization header — the session cookies authenticate instead.
+
+async function getOrCreateCodeRabbitTab() {
+  // Look for an existing app.coderabbit.ai tab
+  const tabs = await chrome.tabs.query({ url: 'https://app.coderabbit.ai/*' });
+  if (tabs.length > 0) {
+    return tabs[0].id;
   }
-  if (creating) {
-    await creating;
-  } else {
-    creating = chrome.offscreen.createDocument({
-      url: path,
-      reasons: ['DOM_PARSER'],
-      justification: 'WebSocket to CodeRabbit API (Chromium SW WS header bug workaround)',
-    });
-    await creating;
-    creating = null;
-  }
+  // Open one in the background if none exists
+  const tab = await chrome.tabs.create({ url: 'https://app.coderabbit.ai/settings/repositories', active: false });
+  // Wait for it to load
+  await new Promise(resolve => {
+    const listener = (tabId, info) => {
+      if (tabId === tab.id && info.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+  return tab.id;
 }
 
-// ============================================================
-// Review Request Handler
-// ============================================================
-async function handleRequestReview(payload, tabId) {
+async function handleRequestReview(payload, ghTabId) {
   const { owner, repo, prNumber } = payload;
   console.log(`Starting review for ${owner}/${repo}#${prNumber}`);
 
@@ -167,28 +170,6 @@ async function handleRequestReview(payload, tabId) {
     throw new Error("Not signed in. Please sign in via the extension options page.");
   }
 
-  // Inject auth headers for the WebSocket upgrade via declarativeNetRequest
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: [2],
-    addRules: [{
-      id: 2,
-      priority: 2,
-      action: {
-        type: "modifyHeaders",
-        requestHeaders: [
-          { header: "Authorization", operation: "set", value: token },
-          { header: "X-CodeRabbit-Extension", operation: "set", value: "vscode" },
-          { header: "X-CodeRabbit-Extension-Version", operation: "set", value: "1.0.6" },
-          { header: "X-CodeRabbit-Extension-ClientId", operation: "set", value: generateUUID() }
-        ]
-      },
-      condition: {
-        urlFilter: "ide.coderabbit.ai",
-        resourceTypes: ["websocket"]
-      }
-    }]
-  });
-
   // Fetch the PR diff
   const diffUrl = `https://patch-diff.githubusercontent.com/raw/${owner}/${repo}/pull/${prNumber}.diff`;
   const diffResponse = await fetch(diffUrl);
@@ -196,16 +177,46 @@ async function handleRequestReview(payload, tabId) {
   const diffContent = await diffResponse.text();
   console.log(`Fetched diff, size: ${diffContent.length} bytes`);
 
-  // Delegate WebSocket to offscreen document
-  await setupOffscreenDocument('offscreen.html');
+  // Find or create a tab on app.coderabbit.ai (so cookies are in scope)
+  const crTabId = await getOrCreateCodeRabbitTab();
+  console.log(`Using CodeRabbit tab ${crTabId} for WebSocket bridge`);
+
+  // Inject the bridge script into the CodeRabbit tab
+  await chrome.scripting.executeScript({
+    target: { tabId: crTabId },
+    files: ['coderabbit-bridge.js']
+  });
 
   const clientId = generateUUID();
   const reviewId = generateUUID();
 
-  chrome.runtime.sendMessage({
-    type: 'START_OFFSCREEN_REVIEW',
-    payload: { owner, repo, prNumber, diffContent, token, tabId, clientId, reviewId }
+  // Send the review request to the bridge script running in the CodeRabbit tab
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(crTabId, {
+      type: 'START_CODERABBIT_WS_REVIEW',
+      payload: { owner, repo, prNumber, diffContent, token, tabId: ghTabId, clientId, reviewId }
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(`Bridge communication failed: ${chrome.runtime.lastError.message}`));
+        return;
+      }
+      if (response?.success) {
+        console.log('Review response from bridge:', response.data);
+        // Forward success to the GitHub tab
+        chrome.tabs.sendMessage(ghTabId, {
+          type: 'REVIEW_RESULT',
+          payload: { status: 'success', message: 'Review submitted via CodeRabbit bridge!' }
+        });
+        resolve(response.data);
+      } else {
+        const errMsg = response?.error || 'Unknown bridge error';
+        console.error('Bridge error:', errMsg);
+        chrome.tabs.sendMessage(ghTabId, {
+          type: 'REVIEW_RESULT',
+          payload: { status: 'error', message: errMsg }
+        });
+        reject(new Error(errMsg));
+      }
+    });
   });
-
-  return { initiated: true, reviewId };
 }
