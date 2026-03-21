@@ -29,9 +29,8 @@ function generateUUID() {
 const clients = new Map();
 
 async function handleRequestReview(payload, tabId) {
-  try {
-    const { owner, repo, prNumber } = payload;
-    console.log(`Starting review for ${owner}/${repo}#${prNumber}`);
+  const { owner, repo, prNumber } = payload;
+  console.log(`Starting review for ${owner}/${repo}#${prNumber}`);
 
     // Fetch the token from storage
     const storageItem = await chrome.storage.local.get('coderabbitToken');
