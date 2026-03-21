@@ -1,6 +1,7 @@
 class CodeRabbitClient {
-  constructor(token) {
+  constructor(token, proxyUrl) {
     this.token = token;
+    this.proxyUrl = proxyUrl || null;
     this.ws = null;
     this.messageId = 1;
     this.resolvers = new Map();
@@ -9,12 +10,19 @@ class CodeRabbitClient {
 
   async connect() {
     return new Promise((resolve, reject) => {
-      // Connect to the IDE websocket endpoint with connectionParams=1
-      const wsUrl = `wss://ide.coderabbit.ai/ws?connectionParams=1`;
+      let wsUrl;
+      if (this.proxyUrl) {
+        // Route through local proxy — pass token as query param, proxy adds HTTP headers upstream
+        wsUrl = `${this.proxyUrl}?connectionParams=1&token=${encodeURIComponent(this.token)}`;
+      } else {
+        // Direct connection (only works from Node.js, not from Chrome)
+        wsUrl = `wss://ide.coderabbit.ai/ws?connectionParams=1`;
+      }
+      console.log("Connecting to:", wsUrl.replace(this.token, '***'));
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log("Connected to CodeRabbit WebSocket");
+        console.log('[WS] ✅ Connected! readyState:', this.ws.readyState);
         // Immediately send connection params for authentication
         const authPayload = {
           method: 'connectionParams',
@@ -23,13 +31,15 @@ class CodeRabbitClient {
             extension: 'vscode'
           }
         };
+        console.log('[WS] Sending connectionParams (token prefix):', this.token.substring(0, 15) + '...');
         this.ws.send(JSON.stringify(authPayload));
         
-        // Give the server a small buffer to process auth before we resolve start sending queries
+        // Give the server a small buffer to process auth before we resolve
         setTimeout(resolve, 300);
       };
 
       this.ws.onmessage = (event) => {
+        console.log('[WS] 📩 Message received:', typeof event.data === 'string' ? event.data.substring(0, 200) : event.data);
         this.handleMessage(event.data);
       };
 
@@ -98,6 +108,7 @@ class CodeRabbitClient {
         }
       };
       
+      console.log(`[WS] 📤 Sending ${type} #${id}:`, method);
       this.ws.send(JSON.stringify(payload));
     });
   }

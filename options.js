@@ -63,6 +63,25 @@ document.addEventListener('DOMContentLoaded', () => {
     showStatus('Signed out', 'success');
   });
 
+  // Debug info display
+  const debugInfo = document.getElementById('debugInfo');
+  function refreshDebugInfo() {
+    chrome.storage.local.get(null, (all) => {
+      const info = {
+        accessToken: all.accessToken ? `${all.accessToken.substring(0, 20)}...  (${all.accessToken.length} chars)` : 'NOT SET',
+        refreshToken: all.refreshToken ? `${all.refreshToken.substring(0, 15)}...` : 'NOT SET',
+        coderabbitToken: all.coderabbitToken ? `${all.coderabbitToken.substring(0, 20)}...` : 'NOT SET',
+        provider: all.provider || 'NOT SET',
+        expiresIn: all.expiresIn || 'NOT SET',
+        storedKeys: Object.keys(all).join(', ')
+      };
+      debugInfo.textContent = JSON.stringify(info, null, 2);
+    });
+  }
+  refreshDebugInfo();
+  // Auto-refresh every 2 seconds
+  setInterval(refreshDebugInfo, 2000);
+
   // Manual token save
   saveBtn.addEventListener('click', () => {
     const token = tokenInput.value.trim();
@@ -70,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.set({ coderabbitToken: token, accessToken: token }, () => {
       showStatus('Token saved!', 'success');
       updateAuthUI({ accessToken: token });
+      refreshDebugInfo();
     });
   });
 });
