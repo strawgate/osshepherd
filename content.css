@@ -1,0 +1,57 @@
+.coderabbit-fab {
+  position: fixed !important;
+  bottom: 30px !important;
+  right: 30px !important;
+  z-index: 999999 !important;
+  background: linear-gradient(135deg, #ff6a00 0%, #ff8c3a 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 50px !important;
+  padding: 14px 24px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  cursor: pointer !important;
+  box-shadow: 0 8px 25px rgba(255, 106, 0, 0.4) !important;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
+.coderabbit-fab:hover {
+  transform: translateY(-5px) scale(1.02) !important;
+  box-shadow: 0 12px 30px rgba(255, 106, 0, 0.5) !important;
+  background: linear-gradient(135deg, #ff7a1a 0%, #ff9a55 100%) !important;
+}
+
+.coderabbit-fab:active {
+  transform: translateY(2px) scale(0.98) !important;
+  box-shadow: 0 5px 15px rgba(255, 106, 0, 0.4) !important;
+}
+
+.coderabbit-fab .cr-icon {
+  font-size: 20px !important;
+}
+
+.coderabbit-loading {
+  opacity: 0.8 !important;
+  cursor: wait !important;
+  animation: pulse 1.5s infinite !important;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); box-shadow: 0 8px 25px rgba(255, 106, 0, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 12px 35px rgba(255, 106, 0, 0.6); }
+  100% { transform: scale(1); box-shadow: 0 8px 25px rgba(255, 106, 0, 0.4); }
+}
+
+.cr-flash {
+  background-color: #ff6a00 !important;
+  color: white !important;
+  font-weight: bold !important;
+  padding: 16px !important;
+  border-radius: 8px !important;
+  margin: 16px !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
+}

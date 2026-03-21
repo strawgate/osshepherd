@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeRabbit Extension Settings</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0d1117;
+      --panel-bg: #161b22;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent: #ff6a00; /* CodeRabbit orange/accent */
+      --accent-hover: #ff8c3a;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .container {
+      background-color: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 40px;
+      width: 400px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+      font-weight: 600;
+      text-align: center;
+      color: #fff;
+    }
+    p.desc {
+      color: var(--text-muted);
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    input[type="password"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-main);
+      font-family: monospace;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="password"]:focus {
+      border-color: var(--accent);
+    }
+    button {
+      width: 100%;
+      background-color: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    button:hover {
+      background-color: var(--accent-hover);
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    .status {
+      margin-top: 16px;
+      text-align: center;
+      font-size: 14px;
+      height: 20px;
+      color: #3fb950;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .status.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CodeRabbit Settings</h1>
+    <p class="desc">Enter your CodeRabbit API Token (or Personal Access Token) to enable PR reviews.</p>
+    
+    <div class="form-group">
+      <label for="token">API Token</label>
+      <input type="password" id="token" placeholder="Paste your token here..." />
+    </div>
+
+    <button id="saveBtn">Save Configuration</button>
+    <div class="status" id="statusMessage">Settings saved successfully!</div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
