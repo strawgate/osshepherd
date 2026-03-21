@@ -34,11 +34,14 @@ async function handleRequestReview(payload, tabId) {
 
     // Fetch the token from storage
     const storageItem = await chrome.storage.local.get('coderabbitToken');
-    const token = storageItem.coderabbitToken;
+    let token = storageItem.coderabbitToken;
 
     if (!token) {
       throw new Error("No CodeRabbit token configured. Please set it in options.");
     }
+    
+    // CRITICAL: Strip any accidental whitespace/newlines pasted into the options page, since HTTP header parsers will crash on trailing newlines!
+    token = token.trim();
 
     // CRITICAL: Chrome browser WebSockets cannot send custom HTTP headers natively. 
     // CodeRabbit's Cloud Armor requires the Token and Proprietary headers on the Handshake layer.
