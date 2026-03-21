@@ -46,8 +46,11 @@ async function handleOAuthLogin() {
   const loginUrl = `https://app.coderabbit.ai/login?client=vscode&state=${state}`;
 
   return new Promise((resolve, reject) => {
-    // Open the login page in a new tab
-    chrome.tabs.create({ url: loginUrl }, (loginTab) => {
+    // Step 1: Open logout URL to clear CodeRabbit's session, then redirect to login
+    // This forces a fresh auth flow that generates a new code  
+    const fullUrl = `https://app.coderabbit.ai/auth/signout?callbackUrl=${encodeURIComponent(loginUrl)}`;
+    
+    chrome.tabs.create({ url: fullUrl }, (loginTab) => {
       const tabId = loginTab.id;
       const timeout = setTimeout(() => {
         chrome.tabs.onUpdated.removeListener(listener);
@@ -55,31 +58,39 @@ async function handleOAuthLogin() {
         reject(new Error('Login timed out after 5 minutes'));
       }, 5 * 60 * 1000);
 
-      // Watch for the tab to redirect to coderabbit-cli://auth-callback
       const listener = async (updatedTabId, changeInfo, tab) => {
         if (updatedTabId !== tabId) return;
         const url = changeInfo.url || tab.url || '';
 
-        // CodeRabbit redirects to coderabbit-cli://auth-callback?code=XXX&provider=github&state=YYY
-        if (url.startsWith('coderabbit-cli://auth-callback')) {
+        console.log('[OAuth] Tab URL changed:', url.substring(0, 80));
+
+        // Watch for the coderabbit-cli:// redirect
+        if (url.startsWith('coderabbit-cli://auth-callback') || url.includes('auth-callback?code=')) {
           clearTimeout(timeout);
           chrome.tabs.onUpdated.removeListener(listener);
           chrome.tabs.remove(tabId).catch(() => {});
 
           try {
-            // Parse the callback URL
-            const params = new URL(url).searchParams;
+            // Parse the auth code from the callback URL
+            let params;
+            try {
+              params = new URL(url).searchParams;
+            } catch {
+              // coderabbit-cli:// may not parse as a valid URL in all contexts
+              const queryString = url.split('?')[1] || '';
+              params = new URLSearchParams(queryString);
+            }
             const code = params.get('code');
             const provider = params.get('provider') || 'github';
 
             if (!code) {
-              reject(new Error('No authorization code received'));
+              reject(new Error('No authorization code in callback URL'));
               return;
             }
 
-            console.log('Got OAuth code, exchanging for tokens...');
+            console.log('[OAuth] Got auth code, exchanging for tokens...');
 
-            // Exchange code for access token via CodeRabbit's tRPC endpoint
+            // Exchange code for access + refresh tokens
             const exchangeUrl = 'https://app.coderabbit.ai/trpc/accessToken.getAccessAndRefreshToken?input=' +
               encodeURIComponent(JSON.stringify({ code, provider, redirectUri: '' }));
 
@@ -93,11 +104,11 @@ async function handleOAuthLogin() {
 
             const tokenData = data.result?.data?.data || data.result?.data || data.data;
             if (!tokenData?.accessToken) {
-              reject(new Error('No access token in response'));
+              reject(new Error('No access token in exchange response'));
               return;
             }
 
-            // Store the tokens
+            // Store tokens
             await chrome.storage.local.set({
               accessToken: tokenData.accessToken,
               refreshToken: tokenData.refreshToken || '',
@@ -106,7 +117,7 @@ async function handleOAuthLogin() {
               coderabbitToken: tokenData.accessToken
             });
 
-            console.log('OAuth login successful!');
+            console.log('[OAuth] Login successful! Token stored.');
             resolve({ success: true });
           } catch (err) {
             reject(err);
