@@ -9,6 +9,7 @@
 const { chromium } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const EXTENSION_PATH = path.resolve(__dirname, '../src');
 const SCREENSHOTS_DIR = path.join(__dirname, '..', 'screenshots');
@@ -24,7 +25,7 @@ async function screenshot(page, name) {
   fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
   console.log('Launching Chromium with extension from src/...');
-  const context = await chromium.launchPersistentContext('/tmp/osshepherd-dry-run', {
+  const context = await chromium.launchPersistentContext(path.join(os.tmpdir(), 'osshepherd-dry-run'), {
     headless: false,
     args: [
       `--disable-extensions-except=${EXTENSION_PATH}`,
@@ -51,19 +52,20 @@ async function screenshot(page, name) {
   console.log('\nStep 2: Popup');
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(500);
+  await page.locator('.header-title').waitFor({ timeout: 3000 }).catch(() => {});
   await screenshot(page, '02-popup');
 
   console.log('\nStep 3: PR page');
   await page.goto(PR_URL, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
+  const fab = page.locator('.coderabbit-fab');
+  await fab.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
   await screenshot(page, '03-pr-page');
 
-  const fab = page.locator('.coderabbit-fab');
   const fabVisible = await fab.isVisible().catch(() => false);
   console.log(`  FAB visible: ${fabVisible ? '✅' : '❌'}`);
 
   console.log('\nScreenshots saved to screenshots/');
+  // Keep browser open for manual inspection
   console.log('Browser open for inspection. Ctrl+C to close.');
   await new Promise(() => {});
 })().catch(e => { console.error(e); process.exit(1); });

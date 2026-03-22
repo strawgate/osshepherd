@@ -10,9 +10,10 @@
 
 const { chromium } = require('@playwright/test');
 const path = require('path');
+const os = require('os');
 
 const EXTENSION_PATH = path.resolve(__dirname, '../src');
-const USER_DATA_DIR = '/tmp/osshepherd-debug-profile';
+const USER_DATA_DIR = path.join(os.tmpdir(), 'osshepherd-debug-profile');
 
 (async () => {
   console.log('Launching Chromium with extension from src/...');
@@ -33,11 +34,10 @@ const USER_DATA_DIR = '/tmp/osshepherd-debug-profile';
   const extensionId = new URL(sw.url()).hostname;
   console.log(`Extension loaded! ID: ${extensionId}`);
 
-  const pages = context.pages();
-  if (pages.length > 0) {
-    await pages[0].goto('https://github.com/strawgate/chromerabbit/pull/2');
-  }
+  const page = context.pages()[0] || await context.newPage();
+  await page.goto('https://github.com');
 
+  // Keep browser open for manual inspection
   console.log('Browser running. Press Ctrl+C to stop.');
   await new Promise(() => {});
 })().catch(e => { console.error(e); process.exit(1); });

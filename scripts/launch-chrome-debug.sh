@@ -30,6 +30,10 @@ echo "  Extension: $EXT_DIR"
 echo "  CDP port: $PORT"
 echo ""
 
+# Ensure Chrome is killed on exit (Ctrl+C, errors, etc.)
+cleanup() { kill "$CHROME_PID" 2>/dev/null; }
+trap cleanup EXIT INT TERM
+
 # Launch Chromium — src/ is clean (no node_modules), so --load-extension works directly
 "$CHROMIUM" \
   --remote-debugging-port="$PORT" \
@@ -44,7 +48,9 @@ CHROME_PID=$!
 # Wait for CDP
 for i in $(seq 1 30); do
   WS_URL=$(curl -sf "http://127.0.0.1:${PORT}/json/version" 2>/dev/null \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['webSocketDebuggerUrl'])" 2>/dev/null || true)
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['webSocketDebuggerUrl'])" 2>/dev/null \
+    || curl -sf "http://127.0.0.1:${PORT}/json/version" 2>/dev/null | jq -r '.webSocketDebuggerUrl' 2>/dev/null \
+    || true)
   [ -n "$WS_URL" ] && break
   sleep 0.5
 done
