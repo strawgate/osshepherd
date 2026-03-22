@@ -171,7 +171,7 @@ function CopyButton({ text, label = '📋 Copy', copiedLabel = '✓ Copied', tit
 
 const STAGES = ['setup', 'summarizing', 'reviewing', 'complete'];
 const STAGE_LABELS = { setup: 'Setup', summarizing: 'Summarize', reviewing: 'Review', complete: 'Done' };
-const STAGE_TABS = { setup: 'setup', summarizing: 'files', reviewing: 'feedback', complete: 'files' };
+const STAGE_TABS = { setup: 'setup', summarizing: 'files', reviewing: 'feedback', complete: 'feedback' };
 
 function Toolbar({ review, onRerun }) {
   const { onSwitchTab } = useContext(SidebarContext);
@@ -422,57 +422,91 @@ function CommentCard({ comment: c }) {
 function CommentsPanel({ review }) {
   const { onNavigate } = useContext(SidebarContext);
   const comments = review.comments || [];
-  const actionable = useMemo(
-    () => comments.filter(c => c.severity !== 'none').sort((a, b) => severityRank(a.severity) - severityRank(b.severity)),
-    [comments]
-  );
-  const lgtm = useMemo(() => comments.filter(c => c.severity === 'none'), [comments]);
 
-  // Severity counts for badge bar
+  // Filter state — trivial and LGTM hidden by default
+  const [hiddenSevs, setHiddenSevs] = useState(new Set(['trivial', 'none']));
+  const toggleSev = useCallback((sev) => {
+    setHiddenSevs(prev => {
+      const next = new Set(prev);
+      if (next.has(sev)) next.delete(sev); else next.add(sev);
+      return next;
+    });
+  }, []);
+
+  // Group by mode
+  const [groupBy, setGroupBy] = useState('severity'); // 'severity' | 'file'
+
+  const filtered = useMemo(
+    () => comments.filter(c => !hiddenSevs.has(c.severity || 'none')),
+    [comments, hiddenSevs]
+  );
+
+  // Severity counts (all, not filtered)
   const sevCounts = useMemo(() => {
     const counts = {};
-    for (const c of actionable) { const s = c.severity || 'medium'; counts[s] = (counts[s] || 0) + 1; }
+    for (const c of comments) { const s = c.severity || 'none'; counts[s] = (counts[s] || 0) + 1; }
     return counts;
-  }, [actionable]);
+  }, [comments]);
+  const sevOrder = ['critical', 'high', 'major', 'medium', 'minor', 'low', 'trivial', 'none'];
 
-  // Group by file, sorted by highest severity
-  const fileGroups = useMemo(() => {
-    const byFile = new Map();
-    for (const c of actionable) {
-      if (!byFile.has(c.filename)) byFile.set(c.filename, []);
-      byFile.get(c.filename).push(c);
+  // Grouped views
+  const bySeverity = useMemo(() => {
+    const groups = new Map();
+    for (const c of filtered) {
+      const s = c.severity || 'none';
+      if (!groups.has(s)) groups.set(s, []);
+      groups.get(s).push(c);
     }
-    return [...byFile.entries()].sort((a, b) => severityRank(a[1][0].severity) - severityRank(b[1][0].severity));
-  }, [actionable]);
+    return sevOrder.filter(s => groups.has(s)).map(s => [s, groups.get(s)]);
+  }, [filtered]);
+
+  const byFile = useMemo(() => {
+    const groups = new Map();
+    for (const c of filtered) {
+      const f = c.filename || 'unknown';
+      if (!groups.has(f)) groups.set(f, []);
+      groups.get(f).push(c);
+    }
+    return [...groups.entries()].sort((a, b) =>
+      severityRank((a[1][0] || {}).severity) - severityRank((b[1][0] || {}).severity)
+    );
+  }, [filtered]);
 
   if (!comments.length) return html`<div class="cr-empty">No comments yet.</div>`;
 
   return html`
-    ${(Object.keys(sevCounts).length > 0 || lgtm.length > 0) && html`
-      <div class="cr-sev-bar">
-        ${Object.entries(sevCounts)
-          .sort((a, b) => severityRank(a[0]) - severityRank(b[0]))
-          .map(([sev, n]) => html`<span class="cr-sev-badge cr-sev-badge-${sev}">${n} ${sev}</span>`)}
-        ${lgtm.length > 0 && html`<span class="cr-sev-badge cr-sev-badge-lgtm">${lgtm.length} LGTM</span>`}
+    <div class="cr-filter-bar">
+      ${sevOrder.filter(s => sevCounts[s]).map(sev => html`
+        <button key=${sev}
+          class="cr-filter-chip cr-sev-badge-${sev === 'none' ? 'lgtm' : sev} ${hiddenSevs.has(sev) ? 'dimmed' : ''}"
+          onClick=${() => toggleSev(sev)}>
+          ${sevCounts[sev]} ${sev === 'none' ? 'LGTM' : sev}
+        </button>
+      `)}
+      <span class="cr-tab-spacer" />
+      <button class="cr-group-toggle" onClick=${() => setGroupBy(groupBy === 'severity' ? 'file' : 'severity')}
+        title=${groupBy === 'severity' ? 'Group by file' : 'Group by severity'}>
+        ${groupBy === 'severity' ? '⊞ by file' : '⊟ by severity'}
+      </button>
+    </div>
+    ${filtered.length === 0 && html`<div class="cr-empty">All comments filtered out. Click a badge above to show.</div>`}
+    ${groupBy === 'severity' ? bySeverity.map(([sev, items]) => html`
+      <div class="cr-sev-group" key=${sev}>
+        <div class="cr-sev-group-header">
+          <${SeverityBadge} severity=${sev} />
+          <span>${items.length} ${sev === 'none' ? 'LGTM' : sev}</span>
+        </div>
+        ${items.map((c, i) => html`<${CommentCard} key=${c.fingerprint || i} comment=${c} />`)}
       </div>
-    `}
-    ${fileGroups.map(([file, fileComments]) => html`
+    `) : byFile.map(([file, items]) => html`
       <div class="cr-file-group" key=${file}>
         <div class="cr-file-group-header cr-clickable-file" onClick=${() => onNavigate(file, '')}>
           <span>${file}</span>
-          <span>${fileComments.length} finding${fileComments.length !== 1 ? 's' : ''}</span>
+          <span>${items.length} finding${items.length !== 1 ? 's' : ''}</span>
         </div>
-        ${fileComments.map((c, i) => html`<${CommentCard} key=${c.fingerprint || i} comment=${c} />`)}
+        ${items.map((c, i) => html`<${CommentCard} key=${c.fingerprint || i} comment=${c} />`)}
       </div>
     `)}
-    ${lgtm.length > 0 && html`
-      <div class="cr-timeline-divider" style="margin-top:16px">
-        <span class="cr-timeline-line" />
-        <span class="cr-timeline-label"><span class="cr-emoji">✅</span> ${lgtm.length} LGTM</span>
-        <span class="cr-timeline-line" />
-      </div>
-      ${lgtm.map((c, i) => html`<${CommentCard} key=${c.fingerprint || 'lgtm-' + i} comment=${c} />`)}
-    `}
   `;
 }
 
@@ -501,32 +535,40 @@ function SetupPanel({ review }) {
   if (!meta) return html`<div class="cr-empty">No review info yet.</div>`;
 
   return html`
-    ${meta.profile && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Review Profile</div>
-        <div class="cr-setup-value">${meta.profile}</div>
-      </div>
-    `}
-    ${meta.plan && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Plan</div>
-        <div class="cr-setup-value">${meta.plan}</div>
-      </div>
-    `}
-    ${meta.config && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Configuration</div>
-        <div class="cr-setup-value">${meta.config}</div>
-      </div>
-    `}
-    ${meta.commits && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Commits</div>
-        <div class="cr-setup-value">${meta.commits}</div>
-      </div>
-    `}
+    <div class="cr-setup-grid">
+      ${meta.profile && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Review Profile</div>
+          <div class="cr-setup-value">${meta.profile}</div>
+        </div>
+      `}
+      ${meta.plan && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Plan</div>
+          <div class="cr-setup-value">${meta.plan}</div>
+        </div>
+      `}
+      ${meta.config && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Configuration</div>
+          <div class="cr-setup-value">${meta.config}</div>
+        </div>
+      `}
+      ${meta.commits && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Commits</div>
+          <div class="cr-setup-value">${meta.commits}</div>
+        </div>
+      `}
+      ${meta.runId && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Run ID</div>
+          <div class="cr-setup-value" style="font-family:monospace;font-size:11px;color:#8b949e">${meta.runId}</div>
+        </div>
+      `}
+    </div>
     ${meta.files?.length > 0 && html`
-      <div class="cr-setup-card">
+      <div class="cr-setup-card cr-setup-full">
         <div class="cr-setup-label">Files Reviewed (${meta.files.length})</div>
         <div class="cr-setup-files">
           ${meta.files.map(f => html`
@@ -535,14 +577,8 @@ function SetupPanel({ review }) {
         </div>
       </div>
     `}
-    ${meta.runId && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Run ID</div>
-        <div class="cr-setup-value" style="font-family:monospace;font-size:11px;color:#8b949e">${meta.runId}</div>
-      </div>
-    `}
     ${meta.agentPrompt && html`
-      <div class="cr-setup-card">
+      <div class="cr-setup-card cr-setup-full">
         <div class="cr-setup-label">AI Agent Prompt</div>
         <pre class="cr-setup-prompt">${meta.agentPrompt}</pre>
       </div>
@@ -561,7 +597,7 @@ function SetupPanel({ review }) {
  */
 function Sidebar({ initialTab, onClose, onRerun }) {
   const review = reviewSignal.value;
-  const [activeTab, setActiveTab] = useState(initialTab || 'files');
+  const [activeTab, setActiveTab] = useState(initialTab || 'feedback');
   const pr = useMemo(
     () => review ? { owner: review.owner, repo: review.repo, prNumber: review.prNumber } : null,
     [review?.owner, review?.repo, review?.prNumber]
@@ -598,7 +634,7 @@ function Sidebar({ initialTab, onClose, onRerun }) {
       <${Toolbar} review=${review} onRerun=${onRerun} />
       <${ReviewOverview} review=${review} />
       <div class="cr-tabs">
-        ${['files', 'feedback', 'setup'].map(tab => html`
+        ${['feedback', 'files', 'setup'].map(tab => html`
           <button key=${tab} class="cr-tab ${activeTab === tab ? 'active' : ''}" onClick=${() => switchTab(tab)}>
             ${tab === 'feedback' ? html`Feedback <span class="cr-tab-badge">${actionableCount}</span>` :
               tab === 'files' ? 'File Summaries' : 'Setup'}

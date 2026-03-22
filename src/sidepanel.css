@@ -193,10 +193,32 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
 }
 .cr-stream-enter { animation: stream-in 0.3s ease-out; }
 
-/* Comments */
-.cr-sev-bar {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  padding: 10px 0 14px; margin-bottom: 10px; border-bottom: 1px solid #21262d;
+/* Feedback filter bar */
+.cr-filter-bar {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 8px 0 12px; margin-bottom: 10px; border-bottom: 1px solid #21262d;
+}
+.cr-filter-chip {
+  font-size: 11px; font-weight: 600; padding: 3px 10px;
+  border-radius: 12px; border: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: opacity 0.15s;
+}
+.cr-filter-chip.dimmed { opacity: 0.3; }
+.cr-filter-chip:hover { opacity: 1; }
+.cr-group-toggle {
+  background: none; border: 1px solid #30363d; border-radius: 6px;
+  color: #8b949e; font-size: 10px; padding: 2px 8px; cursor: pointer;
+  white-space: nowrap; transition: all 0.15s;
+}
+.cr-group-toggle:hover { border-color: #58a6ff; color: #58a6ff; }
+
+/* Severity group header */
+.cr-sev-group { margin-bottom: 14px; }
+.cr-sev-group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; margin-bottom: 8px; font-size: 12px; color: #8b949e;
+  border-bottom: 1px solid #21262d;
 }
 .cr-sev-badge {
   font-size: 11px; font-weight: 600; padding: 3px 10px;
@@ -270,9 +292,13 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
 .cr-raw-event-type { color: #58a6ff; font-weight: bold; }
 
 /* Setup tab */
+.cr-setup-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;
+}
+.cr-setup-full { margin-bottom: 8px; }
 .cr-setup-card {
   background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-  padding: 12px 14px; margin-bottom: 8px;
+  padding: 10px 12px;
 }
 .cr-setup-label {
   font-size: 11px; font-weight: 600; color: #8b949e;
@@ -412,7 +438,10 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
     background: var(--cr-bg-overlay); border-color: var(--cr-blue);
   }
   .cr-comment-text, .cr-stream-body, .cr-setup-value { color: var(--cr-text); }
-  .cr-comment-meta, .cr-review-age { color: var(--cr-text-secondary); }
+  .cr-comment-meta, .cr-review-age, .cr-sev-group-header { color: var(--cr-text-secondary); }
+  .cr-filter-bar, .cr-sev-group-header { border-color: var(--cr-border-subtle); }
+  .cr-group-toggle { border-color: var(--cr-border); color: var(--cr-text-secondary); }
+  .cr-group-toggle:hover { border-color: var(--cr-blue); color: var(--cr-blue); }
   .cr-line-link { color: var(--cr-blue); }
 
   .cr-hero {

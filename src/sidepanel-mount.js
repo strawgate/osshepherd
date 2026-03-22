@@ -111,7 +111,7 @@ function mountApp(review, _prContext) {
   globalThis.navigateToFileLine = (pr, filename, line) => navigateTab(pr, filename, line);
 
   render(
-    html`<${Sidebar} initialTab="files" onClose=${onClose} onRerun=${onRerun} />`,
+    html`<${Sidebar} initialTab="feedback" onClose=${onClose} onRerun=${onRerun} />`,
     mountTarget
   );
 }
