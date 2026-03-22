@@ -187,7 +187,9 @@ function Toolbar({ review, onRerun }) {
   const [stale, setStale] = useState(false);
 
   useEffect(() => {
-    if (review.status !== 'complete' || !review.completedAt) return;
+    // Reset stale when a new review starts
+    if (review.status !== 'complete') { setStale(false); return; }
+    if (!review.completedAt) return;
     let cancelled = false;
     (async () => {
       try {
