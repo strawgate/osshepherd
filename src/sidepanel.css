@@ -227,11 +227,14 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
   display: flex; align-items: flex-start; justify-content: space-between; gap: 6px;
   margin-bottom: 6px;
 }
-.cr-comment-header .cr-action-btn {
-  flex-shrink: 0; opacity: 0.4; font-size: 12px; padding: 2px 5px;
+.cr-comment-actions-inline {
+  display: flex; gap: 2px; flex-shrink: 0;
+}
+.cr-comment-actions-inline .cr-action-btn {
+  opacity: 0.4; font-size: 12px; padding: 2px 5px;
   border: none; background: none;
 }
-.cr-comment-header .cr-action-btn:hover { opacity: 1; border: none; background: none; }
+.cr-comment-actions-inline .cr-action-btn:hover { opacity: 1; border: none; background: none; }
 .cr-comment-meta {
   display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8b949e;
 }

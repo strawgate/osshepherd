@@ -421,7 +421,12 @@ function CommentCard({ comment: c }) {
           <${SeverityBadge} severity=${c.severity} />
           ${lineLabel && html`<span class="cr-line-link" onClick=${goToLine}>${lineLabel} →</span>`}
         </div>
-        <${CopyButton} text=${rawText} label="📋" copiedLabel="✓" title="Copy comment" />
+        <div class="cr-comment-actions-inline">
+          ${c.codegenInstructions && html`
+            <${CopyButton} text=${c.codegenInstructions} label="🤖" copiedLabel="✓" title="Copy AI fix prompt for this issue" />
+          `}
+          <${CopyButton} text=${rawText} label="📋" copiedLabel="✓" title="Copy comment" />
+        </div>
       </div>
       <div class="cr-comment-text">
         <${Markdown} text=${rawText} />
