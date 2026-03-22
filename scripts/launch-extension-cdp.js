@@ -1,0 +1,43 @@
+#!/usr/bin/env node
+/**
+ * Launch Chromium with the OSShepherd extension via Playwright's launchPersistentContext().
+ *
+ * Usage:  node scripts/launch-extension-cdp.js
+ *
+ * NOTE: Uses Playwright's bundled Chromium, NOT system Chrome.
+ * Chrome 146+ has a bug where --load-extension is silently ignored.
+ */
+
+const { chromium } = require('@playwright/test');
+const path = require('path');
+
+const EXTENSION_PATH = path.resolve(__dirname, '../src');
+const USER_DATA_DIR = '/tmp/osshepherd-debug-profile';
+
+(async () => {
+  console.log('Launching Chromium with extension from src/...');
+
+  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+    headless: false,
+    args: [
+      `--disable-extensions-except=${EXTENSION_PATH}`,
+      `--load-extension=${EXTENSION_PATH}`,
+    ],
+  });
+
+  let sw = context.serviceWorkers()[0];
+  if (!sw) {
+    console.log('Waiting for extension service worker...');
+    sw = await context.waitForEvent('serviceworker', { timeout: 10_000 });
+  }
+  const extensionId = new URL(sw.url()).hostname;
+  console.log(`Extension loaded! ID: ${extensionId}`);
+
+  const pages = context.pages();
+  if (pages.length > 0) {
+    await pages[0].goto('https://github.com/strawgate/chromerabbit/pull/2');
+  }
+
+  console.log('Browser running. Press Ctrl+C to stop.');
+  await new Promise(() => {});
+})().catch(e => { console.error(e); process.exit(1); });

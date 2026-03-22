@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 // Inject fake WebSocket so the module's wsFactory default is overridable
 global.window = undefined;  // force module.exports path
-const CodeRabbitClient = require('../../utils/trpc-client');
+const CodeRabbitClient = require('../../src/utils/trpc-client');
 
 // ---------------------------------------------------------------------------
 // Fake WebSocket — records sent frames, lets tests drive server responses

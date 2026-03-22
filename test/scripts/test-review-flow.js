@@ -73,9 +73,9 @@ if (prUrl) {
 // replicating what DNR rules do inside the real Chrome extension.
 // ---------------------------------------------------------------------------
 global.window = undefined; // ensure the module.exports path is taken
-const CodeRabbitClient = require('./utils/trpc-client');
-const { parseDiff } = require('./utils/diff-parser');
-const { generateUUID } = require('./utils/utils');
+const CodeRabbitClient = require('./src/utils/trpc-client');
+const { parseDiff } = require('./src/utils/diff-parser');
+const { generateUUID } = require('./src/utils/utils');
 
 // ---------------------------------------------------------------------------
 // Main

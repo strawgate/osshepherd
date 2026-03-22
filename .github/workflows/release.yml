@@ -22,9 +22,9 @@ jobs:
             const fs = require('fs');
             const version = process.env.TAG.replace(/^v/, '');
             console.log('Setting manifest version to', version);
-            const m = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+            const m = JSON.parse(fs.readFileSync('src/manifest.json', 'utf8'));
             m.version = version;
-            fs.writeFileSync('manifest.json', JSON.stringify(m, null, 2) + '\n');
+            fs.writeFileSync('src/manifest.json', JSON.stringify(m, null, 2) + '\n');
           "
 
       - name: Build extension zip

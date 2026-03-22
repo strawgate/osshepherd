@@ -22,7 +22,7 @@ function loadAsScript(relPath, context = {}) {
   // globalThis must point at the sandbox itself
   sandbox.globalThis = sandbox;
 
-  const src = fs.readFileSync(path.resolve(__dirname, '../../', relPath), 'utf8');
+  const src = fs.readFileSync(path.resolve(__dirname, '../../src', relPath), 'utf8');
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox, { filename: relPath });
   return sandbox;

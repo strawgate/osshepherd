@@ -19,7 +19,7 @@ test-e2e:
 zip:
 	@echo "Building osshepherd.zip…"
 	@rm -f osshepherd.zip
-	@zip -r osshepherd.zip \
+	@cd src && zip -r ../osshepherd.zip \
 		manifest.json \
 		background.js \
 		content.js \

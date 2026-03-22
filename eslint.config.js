@@ -45,7 +45,7 @@ const preactGlobals = {
 module.exports = [
   // ── Ignored paths ────────────────────────────────────────────────────────
   {
-    ignores: ['node_modules/**', '_metadata/**', 'vendor/**', 'plans/**'],
+    ignores: ['node_modules/**', '_metadata/**', 'src/vendor/**', 'plans/**'],
   },
 
   // ── Base rules applied to every file ─────────────────────────────────────
@@ -65,7 +65,7 @@ module.exports = [
   // Environment: ServiceWorkerGlobalScope — no window, no DOM.
   // Globals arrive via importScripts(); they are not imports.
   {
-    files: ['background.js'],
+    files: ['src/background.js'],
     languageOptions: {
       globals: {
         ...globals.serviceworker,   // self, importScripts, caches, clients…
@@ -88,7 +88,7 @@ module.exports = [
   // Has DOM but only chrome.runtime (NOT chrome.storage, chrome.tabs, etc.).
   // Globals arrive via <script> tags in offscreen.html.
   {
-    files: ['offscreen.js'],
+    files: ['src/offscreen.js'],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -103,7 +103,7 @@ module.exports = [
 
   // ── Sidebar (Preact components) ──────────────────────────────────────────
   {
-    files: ['sidebar.js', 'sidepanel-mount.js'],
+    files: ['src/sidebar.js', 'src/sidepanel-mount.js'],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -128,7 +128,7 @@ module.exports = [
 
   // ── Content scripts, popup, options ──────────────────────────────────────
   {
-    files: ['content.js', 'popup.js', 'options.js'],
+    files: ['src/content.js', 'src/popup.js', 'src/options.js'],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -146,7 +146,7 @@ module.exports = [
   // chrome is included because review-store.js uses chrome.storage.local as a
   // default parameter (only evaluated at call time in browser contexts).
   {
-    files: ['utils/*.js'],
+    files: ['src/utils/*.js'],
     languageOptions: {
       globals: {
         ...globals.browser,

@@ -3,7 +3,12 @@ node_modules/
 .DS_Store
 capture_ws.py
 osshepherd.zip
+chromerabbit.zip
 test-results/
 plans/
 .trace
 *.log
+screenshots/
+.mcp.json
+playwright-mcp.config.json
+src/_metadata/

@@ -8,7 +8,7 @@ const { chromium } = playwright;
 const base = playwright.test;
 const path = require('path');
 
-const EXTENSION_PATH = path.resolve(__dirname, '../../');
+const EXTENSION_PATH = path.resolve(__dirname, '../../src');
 
 const test = base.extend({
   context: async ({ }, use) => {

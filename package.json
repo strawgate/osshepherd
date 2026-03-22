@@ -1,7 +1,7 @@
 {
   "name": "osshepherd",
   "version": "1.0.0",
-  "main": "background.js",
+  "main": "src/background.js",
   "description": "OSShepherd — a Chrome extension for open-source maintainers to trigger CodeRabbit AI reviews on GitHub PRs.",
   "author": "OSShepherd Contributors",
   "keywords": [
