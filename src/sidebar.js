@@ -209,18 +209,20 @@ function Toolbar({ review, onRerun }) {
 
   return html`
     <div class="cr-toolbar visible">
-      <div class="cr-toolbar-row tracker-row">
-        ${STAGES.map((s, idx) => html`
-          ${idx > 0 && html`<div class="cr-tracker-line ${idx <= currentIdx ? 'done' : ''}" />`}
-          <div
-            class="cr-tracker-step ${idx < currentIdx ? 'done' : idx === currentIdx ? (isDone ? 'done' : 'active') : ''}"
-            onClick=${() => (idx <= currentIdx) && onSwitchTab(STAGE_TABS[s])}
-          >
-            <div class="cr-tracker-dot">✓</div>
-            <span>${STAGE_LABELS[s]}</span>
-          </div>
-        `)}
-      </div>
+      ${!isDone && html`
+        <div class="cr-toolbar-row tracker-row">
+          ${STAGES.map((s, idx) => html`
+            ${idx > 0 && html`<div class="cr-tracker-line ${idx <= currentIdx ? 'done' : ''}" />`}
+            <div
+              class="cr-tracker-step ${idx < currentIdx ? 'done' : idx === currentIdx ? 'active' : ''}"
+              onClick=${() => (idx <= currentIdx) && onSwitchTab(STAGE_TABS[s])}
+            >
+              <div class="cr-tracker-dot">✓</div>
+              <span>${STAGE_LABELS[s]}</span>
+            </div>
+          `)}
+        </div>
+      `}
       <div class="cr-toolbar-row info-row">
         <span class="cr-review-age">
           ${isDone ? `Reviewed ${age}` : 'In progress…'}
