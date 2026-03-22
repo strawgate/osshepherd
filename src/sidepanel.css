@@ -375,14 +375,20 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
   min-width: 52px;
 }
 
-/* Effort badge on file summary cards */
-.cr-effort-bar {
-  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center;
+/* Effort group headers */
+.cr-effort-group { margin-bottom: 14px; }
+.cr-effort-group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; margin-bottom: 8px; font-size: 12px; color: #8b949e;
+  border-bottom: 1px solid #21262d;
 }
-.cr-effort-label {
-  font-size: 11px; font-weight: 600; color: #484f58; text-transform: uppercase;
-  letter-spacing: 0.03em; margin-right: 2px;
-}
+
+/* Effort filter chips */
+.cr-effort-chip-high { background: #1f2a3d; color: #79c0ff; }
+.cr-effort-chip-medium { background: #1f2a3d; color: #58a6ff; }
+.cr-effort-chip-low { background: #21262d; color: #8b949e; }
+.cr-effort-chip-trivial { background: #21262d; color: #484f58; }
+.cr-effort-chip-unknown { background: #21262d; color: #484f58; }
 .cr-effort-badge {
   font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 8px;
   white-space: nowrap; text-transform: capitalize;
@@ -503,7 +509,10 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
   }
   .cr-setup-prompt { background: var(--cr-bg); border-color: var(--cr-border-subtle); color: var(--cr-text-secondary); }
 
-  .cr-effort-label { color: var(--cr-text-muted); }
+  .cr-effort-group-header { border-color: var(--cr-border-subtle); color: var(--cr-text-secondary); }
+  .cr-effort-chip-high { background: #ddf4ff; color: var(--cr-blue); }
+  .cr-effort-chip-medium { background: #ddf4ff; color: #0550ae; }
+  .cr-effort-chip-low, .cr-effort-chip-trivial, .cr-effort-chip-unknown { background: var(--cr-bg-overlay); color: var(--cr-text-muted); }
   .cr-effort-high { background: #ddf4ff; color: var(--cr-blue); }
   .cr-effort-medium { background: #ddf4ff; color: #0550ae; }
   .cr-effort-low { background: var(--cr-bg-overlay); color: var(--cr-text-secondary); }

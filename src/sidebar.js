@@ -299,38 +299,92 @@ function FileSummaryCard({ filename, summary, isStreaming }) {
   `;
 }
 
-function FileSummariesSection({ fileEntries, isStreaming, elapsed }) {
-  const effortCounts = useMemo(() => {
-    const counts = {};
-    for (const [, summary] of fileEntries) {
-      const e = parseEffort(summary);
-      if (e) counts[e] = (counts[e] || 0) + 1;
-    }
-    return counts;
-  }, [fileEntries]);
-  const hasEffort = Object.keys(effortCounts).length > 0;
+function FileSummariesSection({ fileEntries, isStreaming }) {
   const effortOrder = ['high', 'medium', 'low', 'trivial'];
 
+  // Parse effort for each file
+  const filesWithEffort = useMemo(() =>
+    fileEntries.map(([fn, s]) => [fn, s, parseEffort(s) || 'unknown']),
+    [fileEntries]
+  );
+
+  // Effort counts
+  const effortCounts = useMemo(() => {
+    const counts = {};
+    for (const [,, e] of filesWithEffort) counts[e] = (counts[e] || 0) + 1;
+    return counts;
+  }, [filesWithEffort]);
+
+  // Filter state — low and trivial hidden by default (like feedback hides trivial+LGTM)
+  const [hiddenEfforts, setHiddenEfforts] = useState(new Set(['low', 'trivial']));
+  const toggleEffort = useCallback((e) => {
+    setHiddenEfforts(prev => {
+      const next = new Set(prev);
+      if (next.has(e)) next.delete(e); else next.add(e);
+      return next;
+    });
+  }, []);
+
+  // Group by mode
+  const [groupBy, setGroupBy] = useState('effort'); // 'effort' | 'flat'
+
+  const filtered = useMemo(
+    () => filesWithEffort.filter(([,, e]) => !hiddenEfforts.has(e)),
+    [filesWithEffort, hiddenEfforts]
+  );
+
+  // Grouped by effort level
+  const byEffort = useMemo(() => {
+    const groups = new Map();
+    for (const [fn, s, e] of filtered) {
+      if (!groups.has(e)) groups.set(e, []);
+      groups.get(e).push([fn, s]);
+    }
+    const order = [...effortOrder, 'unknown'];
+    return order.filter(e => groups.has(e)).map(e => [e, groups.get(e)]);
+  }, [filtered]);
+
+  const hasEffort = Object.keys(effortCounts).length > 1 || !effortCounts.unknown;
+  const allEfforts = [...effortOrder, 'unknown'];
+
+  if (isStreaming) {
+    return html`
+      ${fileEntries.map(([fn, s]) => html`
+        <${FileSummaryCard} key=${fn} filename=${fn} summary=${s} isStreaming=${true} />
+      `)}
+    `;
+  }
+
   return html`
-    <div class="cr-timeline-divider">
-      <span class="cr-timeline-line" />
-      <span class="cr-timeline-label">
-        ${isStreaming
-          ? html`<span class="cr-emoji">📝</span> File Summaries${elapsed !== null ? ` · ${elapsed}s` : ''}`
-          : html`<span class="cr-emoji">📝</span> ${fileEntries.length} File${fileEntries.length !== 1 ? 's' : ''} Analyzed`}
-      </span>
-      <span class="cr-timeline-line" />
-    </div>
-    ${hasEffort && !isStreaming && html`
-      <div class="cr-effort-bar">
-        <span class="cr-effort-label">Review Effort</span>
-        ${effortOrder.filter(e => effortCounts[e]).map(e => html`
-          <span class="cr-effort-badge cr-effort-${e}">${effortCounts[e]} ${e}</span>
+    ${hasEffort && html`
+      <div class="cr-filter-bar">
+        ${allEfforts.filter(e => effortCounts[e]).map(e => html`
+          <button key=${e}
+            class="cr-filter-chip cr-effort-chip-${e} ${hiddenEfforts.has(e) ? 'dimmed' : ''}"
+            onClick=${() => toggleEffort(e)}>
+            ${effortCounts[e]} ${e === 'unknown' ? 'other' : e}
+          </button>
         `)}
+        <span class="cr-tab-spacer" />
+        <button class="cr-group-toggle" onClick=${() => setGroupBy(groupBy === 'effort' ? 'flat' : 'effort')}
+          title=${groupBy === 'effort' ? 'Show flat list' : 'Group by effort'}>
+          ${groupBy === 'effort' ? '☰ flat' : '⊞ by effort'}
+        </button>
       </div>
     `}
-    ${fileEntries.map(([fn, s]) => html`
-      <${FileSummaryCard} key=${fn} filename=${fn} summary=${s} isStreaming=${isStreaming} />
+    ${filtered.length === 0 && html`<div class="cr-empty">All files filtered out. Click a badge above to show.</div>`}
+    ${groupBy === 'effort' && hasEffort ? byEffort.map(([effort, files]) => html`
+      <div class="cr-effort-group" key=${effort}>
+        <div class="cr-effort-group-header">
+          <span class="cr-effort-badge cr-effort-${effort}">${effort === 'unknown' ? 'other' : effort} effort</span>
+          <span>${files.length} file${files.length !== 1 ? 's' : ''}</span>
+        </div>
+        ${files.map(([fn, s]) => html`
+          <${FileSummaryCard} key=${fn} filename=${fn} summary=${s} isStreaming=${false} />
+        `)}
+      </div>
+    `) : filtered.map(([fn, s]) => html`
+      <${FileSummaryCard} key=${fn} filename=${fn} summary=${s} isStreaming=${false} />
     `)}
   `;
 }
