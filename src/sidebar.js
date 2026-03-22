@@ -499,9 +499,6 @@ function CommentsPanel({ review, agentPrompt }) {
         </button>
       `)}
       <span class="cr-tab-spacer" />
-      ${agentPrompt && html`
-        <${CopyButton} text=${agentPrompt} label="🤖 Fix" copiedLabel="✓ Copied" title="Copy AI prompt to fix all issues" class="cr-prompt-chip" />
-      `}
       <button class="cr-group-toggle" onClick=${() => setGroupBy(groupBy === 'severity' ? 'file' : 'severity')}
         title=${groupBy === 'severity' ? 'Group by file' : 'Group by severity'}>
         ${groupBy === 'severity' ? '⊞ by file' : '⊟ by severity'}
@@ -661,7 +658,7 @@ function Sidebar({ initialTab, onClose, onRerun }) {
         ${['feedback', 'files', 'setup'].map(tab => html`
           <button key=${tab} class="cr-tab ${activeTab === tab ? 'active' : ''}" onClick=${() => switchTab(tab)}>
             ${tab === 'feedback' ? html`Feedback <span class="cr-tab-badge">${actionableCount}</span>` :
-              tab === 'files' ? 'File Summaries' : 'Setup'}
+              tab === 'files' ? 'Files' : 'Config'}
           </button>
         `)}
         <span class="cr-tab-spacer" />
