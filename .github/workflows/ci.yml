@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: ESLint
+        run: npx eslint .
+
+      - name: Markdownlint
+        run: npm run lint:md
+
+      - name: Unit tests
+        run: npm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install chromium
+
+      - name: Playwright E2E tests
+        run: HEADLESS=new npx playwright test
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build extension zip
+        run: make zip
+
+      - name: Verify zip contents
+        run: |
+          echo "=== Files in zip ==="
+          unzip -l chromerabbit.zip
+          echo ""
+          echo "=== Checking for files that should NOT be included ==="
+          FOUND=0
+          for PATTERN in test- .env node_modules Makefile .github .markdownlint eslint.config playwright.config jsconfig DESIGN DEVELOPING MITM agents; do
+            if unzip -l chromerabbit.zip | grep -q "$PATTERN"; then
+              echo "ERROR: Found '$PATTERN' in zip"
+              FOUND=1
+            fi
+          done
+          if [ $FOUND -eq 1 ]; then exit 1; fi
+          echo "All clear — no dev files in zip."
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromerabbit-extension
+          path: chromerabbit.zip

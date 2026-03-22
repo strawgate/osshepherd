@@ -1,8 +1,9 @@
 node_modules/
 .env
 .DS_Store
+capture_ws.py
+chromerabbit.zip
+test-results/
+plans/
+.trace
 *.log
-puppeteer-test.js
-test-coderabbit.js
-test-origin.js
-test-ws.js

@@ -1,22 +1,27 @@
 {
-  "dependencies": {
-    "cheerio": "^1.2.0",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "node-fetch": "^3.3.2",
-    "puppeteer": "^24.40.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "ws": "^8.19.0"
-  },
   "name": "chromerabbit",
   "version": "1.0.0",
   "main": "background.js",
   "description": "Chrome extension to trigger CodeRabbit AI reviews on GitHub pull requests without leaving the browser.",
-  "author": "CodeRabbit Team",
-  "keywords": ["chromerabbit", "browser-extension", "coderabbit", "github-pr", "code-review"],
+  "author": "ChromeRabbit Contributors",
+  "keywords": [
+    "chromerabbit",
+    "browser-extension",
+    "coderabbit",
+    "github-pr",
+    "code-review"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/unit/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage test/unit/*.test.js",
+    "test:e2e": "npx playwright test",
+    "test:snapshots": "node --test --test-update-snapshots test/unit/*.test.js",
+    "lint": "eslint .",
+    "lint:md": "markdownlint-cli2 \"**/*.md\" \"!node_modules/**\" \"!plans/**\"",
+    "build": "make zip"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "repository": {
     "type": "git",
@@ -27,5 +32,19 @@
   "bugs": {
     "url": "https://github.com/strawgate/chromerabbit/issues"
   },
-  "homepage": "https://github.com/strawgate/chromerabbit#readme"
+  "homepage": "https://github.com/strawgate/chromerabbit#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/chrome": "^0.1.38",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0",
+    "jest-webextension-mock": "^4.1.1",
+    "markdownlint-cli2": "^0.22.0",
+    "ws": "^8.19.0"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.8.2",
+    "htm": "^3.1.1",
+    "preact": "^10.29.0"
+  }
 }

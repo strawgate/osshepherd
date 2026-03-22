@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CodeRabbit Extension Settings</title>
+  <title>ChromeRabbit Settings</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -13,7 +13,6 @@
       --text-main: #c9d1d9;
       --text-muted: #8b949e;
       --accent: #ff6a00;
-      --accent-hover: #ff8c3a;
       --green: #3fb950;
       --red: #f85149;
     }
@@ -34,7 +33,6 @@
     h1 { margin-top: 0; font-size: 24px; font-weight: 600; text-align: center; color: #fff; }
     p.desc { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 24px; }
 
-    /* Auth status card */
     .auth-card {
       background: var(--bg-color); border: 1px solid var(--border-color);
       border-radius: 8px; padding: 16px; margin-bottom: 24px; text-align: center;
@@ -42,7 +40,6 @@
     .auth-card.logged-in { border-color: var(--green); }
     .auth-card .auth-status { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
     .auth-card .auth-user { font-size: 16px; font-weight: 600; color: var(--green); }
-    .auth-card .auth-provider { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
     button {
       width: 100%;
@@ -57,24 +54,6 @@
 
     #loginBtn { background-color: var(--accent); margin-bottom: 10px; }
     #logoutBtn { background-color: var(--red); display: none; margin-bottom: 10px; }
-
-    .divider {
-      border: none; border-top: 1px solid var(--border-color);
-      margin: 20px 0;
-    }
-    .manual-section h3 {
-      font-size: 14px; color: var(--text-muted); font-weight: 500; margin-bottom: 12px;
-    }
-    .form-group { margin-bottom: 16px; }
-    label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; }
-    input[type="password"] {
-      width: 100%; box-sizing: border-box; padding: 10px 12px;
-      background-color: var(--bg-color); border: 1px solid var(--border-color);
-      border-radius: 6px; color: var(--text-main); font-family: monospace; font-size: 14px;
-      outline: none; transition: border-color 0.2s;
-    }
-    input[type="password"]:focus { border-color: var(--accent); }
-    #saveBtn { background-color: #238636; }
 
     .status {
       margin-top: 12px; text-align: center; font-size: 13px; height: 18px;
@@ -91,42 +70,39 @@
       vertical-align: middle; margin-right: 8px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .divider { border: none; border-top: 1px solid var(--border-color); margin: 20px 0; }
+    .debug-section h3 { font-size: 14px; color: var(--text-muted); font-weight: 500; margin-bottom: 12px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🐰 CodeRabbit Settings</h1>
+    <h1>🐰 ChromeRabbit Settings</h1>
     <p class="desc">Sign in with your CodeRabbit account to enable AI-powered PR reviews.</p>
+    <p style="font-size:10px;color:var(--text-muted);text-align:center;margin-bottom:16px;">ChromeRabbit is a community project — not affiliated with or endorsed by CodeRabbit.</p>
 
-    <!-- Auth status -->
     <div class="auth-card" id="authCard">
       <div class="auth-status" id="authStatus">Not signed in</div>
       <div class="auth-user" id="authUser" style="display:none"></div>
-      <div class="auth-provider" id="authProvider" style="display:none"></div>
     </div>
 
     <button id="loginBtn">Sign in with CodeRabbit</button>
     <button id="logoutBtn">Sign Out</button>
 
-    <hr class="divider">
-
-    <div class="manual-section">
-      <h3>Or paste a token manually</h3>
-      <div class="form-group">
-        <label for="token">Access Token</label>
-        <input type="password" id="token" placeholder="Paste your access token here..." />
-      </div>
-      <button id="saveBtn">Save Token</button>
-    </div>
-
     <div class="status" id="statusMessage"></div>
 
     <hr class="divider">
-    <div class="manual-section">
+    <div class="debug-section">
+      <h3>Review Cache</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Cached reviews are stored locally. Clear them if the sidebar shows stale data.</p>
+      <button id="clearCacheBtn" style="background:var(--border-color);margin-bottom:16px;font-size:13px">Clear All Cached Reviews</button>
+      <div id="cacheStatus" class="status"></div>
+
       <h3>Debug Info</h3>
       <pre id="debugInfo" style="background:var(--bg-color);border:1px solid var(--border-color);border-radius:6px;padding:12px;font-size:12px;color:var(--text-muted);overflow-x:auto;white-space:pre-wrap;max-height:200px;overflow-y:auto;">Loading...</pre>
     </div>
   </div>
+  <script src="utils/review-store.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

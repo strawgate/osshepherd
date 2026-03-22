@@ -1,0 +1,42 @@
+name: Release to Chrome Web Store
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Sync version from release tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const version = process.env.TAG.replace(/^v/, '');
+            console.log('Setting manifest version to', version);
+            const m = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+            m.version = version;
+            fs.writeFileSync('manifest.json', JSON.stringify(m, null, 2) + '\n');
+          "
+
+      - name: Build extension zip
+        run: make zip
+
+      - name: Upload to Chrome Web Store
+        uses: mnao305/chrome-extension-upload@v5.0.0
+        with:
+          file-path: chromerabbit.zip
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          # Set to true once you're confident in the flow:
+          # publish: true

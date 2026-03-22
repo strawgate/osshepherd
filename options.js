@@ -1,12 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
   const loginBtn = document.getElementById('loginBtn');
   const logoutBtn = document.getElementById('logoutBtn');
-  const saveBtn = document.getElementById('saveBtn');
-  const tokenInput = document.getElementById('token');
   const statusMessage = document.getElementById('statusMessage');
   const authCard = document.getElementById('authCard');
   const authStatus = document.getElementById('authStatus');
   const authUser = document.getElementById('authUser');
+  const debugInfo = document.getElementById('debugInfo');
 
   function showStatus(message, type = 'success') {
     statusMessage.textContent = message;
@@ -19,31 +18,26 @@ document.addEventListener('DOMContentLoaded', () => {
       authCard.classList.add('logged-in');
       authStatus.textContent = '✅ Signed in';
       authUser.style.display = 'block';
-      authUser.textContent = data.provider ? `via ${data.provider}` : 'Token configured';
+      authUser.textContent = data.userName ? `@${data.userName}` : (data.provider ? `via ${data.provider}` : 'Token configured');
       loginBtn.style.display = 'none';
       logoutBtn.style.display = 'block';
-      tokenInput.value = data.accessToken || data.coderabbitToken || '';
     } else {
       authCard.classList.remove('logged-in');
       authStatus.textContent = 'Not signed in';
       authUser.style.display = 'none';
       loginBtn.style.display = 'block';
       logoutBtn.style.display = 'none';
-      tokenInput.value = '';
     }
   }
 
-  // Load existing auth state
-  const AUTH_KEYS = ['accessToken', 'refreshToken', 'provider', 'coderabbitToken'];
+  const AUTH_KEYS = ['accessToken', 'refreshToken', 'provider', 'coderabbitToken', 'userName', 'organizationId'];
   chrome.storage.local.get(AUTH_KEYS, updateAuthUI);
 
-  // --- OAuth Login via background script ---
   loginBtn.addEventListener('click', async () => {
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<span class="spinner"></span>Waiting for login...';
     showStatus('A login tab will open. Please sign in with CodeRabbit.', 'success');
 
-    // Ask the background script to handle the OAuth flow
     chrome.runtime.sendMessage({ type: 'START_OAUTH_LOGIN' }, (response) => {
       loginBtn.disabled = false;
       loginBtn.innerHTML = 'Sign in with CodeRabbit';
@@ -62,40 +56,52 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Logout
   logoutBtn.addEventListener('click', async () => {
-    await chrome.storage.local.remove(['accessToken', 'refreshToken', 'expiresIn', 'provider', 'coderabbitToken']);
+    await chrome.storage.local.remove(['accessToken', 'refreshToken', 'expiresIn', 'provider', 'coderabbitToken',
+      'userId', 'userName', 'userEmail', 'providerUserId', 'organizationId']);
     updateAuthUI(null);
     showStatus('Signed out', 'success');
   });
 
-  // Debug info display
-  const debugInfo = document.getElementById('debugInfo');
+  // Clear review cache
+  const clearCacheBtn = document.getElementById('clearCacheBtn');
+  const cacheStatus = document.getElementById('cacheStatus');
+  clearCacheBtn.addEventListener('click', async () => {
+    clearCacheBtn.disabled = true;
+    clearCacheBtn.textContent = 'Clearing…';
+    try {
+      const reviews = await ReviewStore.loadAll();
+      for (const r of reviews) {
+        await ReviewStore.remove(r.owner, r.repo, r.prNumber);
+      }
+      // Safety-net: ensure index is cleared even if ReviewStore.remove() left stale state
+      await new Promise(resolve => chrome.storage.local.remove('reviews:index', resolve));
+      clearCacheBtn.textContent = `Cleared ${reviews.length} review${reviews.length !== 1 ? 's' : ''}`;
+      cacheStatus.textContent = `${reviews.length} cached review${reviews.length !== 1 ? 's' : ''} removed.`;
+      cacheStatus.className = 'status show success';
+    } catch (err) {
+      cacheStatus.textContent = err.message;
+      cacheStatus.className = 'status show error';
+    }
+    setTimeout(() => {
+      clearCacheBtn.disabled = false;
+      clearCacheBtn.textContent = 'Clear All Cached Reviews';
+      cacheStatus.className = 'status';
+    }, 3000);
+  });
+
   function refreshDebugInfo() {
     chrome.storage.local.get(null, (all) => {
       const info = {
-        accessToken: all.accessToken ? `${all.accessToken.substring(0, 20)}...  (${all.accessToken.length} chars)` : 'NOT SET',
-        refreshToken: all.refreshToken ? `${all.refreshToken.substring(0, 15)}...` : 'NOT SET',
+        accessToken: all.accessToken ? `${all.accessToken.substring(0, 20)}... (${all.accessToken.length} chars)` : 'NOT SET',
         coderabbitToken: all.coderabbitToken ? `${all.coderabbitToken.substring(0, 20)}...` : 'NOT SET',
+        userName: all.userName || 'NOT SET',
+        organizationId: all.organizationId || 'NOT SET',
         provider: all.provider || 'NOT SET',
-        expiresIn: all.expiresIn || 'NOT SET',
-        storedKeys: Object.keys(all).join(', ')
       };
       debugInfo.textContent = JSON.stringify(info, null, 2);
     });
   }
   refreshDebugInfo();
-  // Auto-refresh every 2 seconds
   setInterval(refreshDebugInfo, 2000);
-
-  // Manual token save
-  saveBtn.addEventListener('click', () => {
-    const token = tokenInput.value.trim();
-    if (!token) { showStatus('Please enter a token', 'error'); return; }
-    chrome.storage.local.set({ coderabbitToken: token, accessToken: token }, () => {
-      showStatus('Token saved!', 'success');
-      updateAuthUI({ accessToken: token });
-      refreshDebugInfo();
-    });
-  });
 });

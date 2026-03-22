@@ -1,109 +1,215 @@
-console.log('CodeRabbit PR Review Extension loaded');
+/**
+ * content.js — Orchestrator for the ChromeRabbit extension on GitHub PR pages.
+ *
+ * Responsibilities:
+ *  - FAB button injection and state machine
+ *  - GitHub SPA navigation detection (Turbo Drive)
+ *  - Background message handling (REVIEW_UPDATE, REVIEW_RESULT)
+ *  - Opens the chrome.sidePanel via messaging to background
+ *  - Toast notifications
+ *
+ * The sidebar UI runs in chrome.sidePanel (sidepanel.html), NOT in this content script.
+ * This script is lightweight: no Preact, no markdown, no sidebar rendering.
+ */
 
-// CSS classes for styling
+/* global ReviewStore */
+
+const LOG = (...args) => console.log('[CR:content]', ...args);
+const ERR = (...args) => console.error('[CR:content]', ...args);
+
 const BTN_CLASS = 'coderabbit-fab';
-const BTN_LOADING_CLASS = 'coderabbit-loading';
+
+// ---------------------------------------------------------------------------
+// PR identity from URL
+// ---------------------------------------------------------------------------
+
+function getPRFromURL() {
+  const parts = window.location.pathname.split('/');
+  if (parts[3] !== 'pull' || !parts[4]) return null;
+  return { owner: parts[1], repo: parts[2], prNumber: parts[4] };
+}
+
+// ---------------------------------------------------------------------------
+// SidePanel helper
+// ---------------------------------------------------------------------------
+
+function openSidePanel(pr) {
+  chrome.runtime.sendMessage({ type: 'OPEN_SIDEPANEL', payload: pr }, (response) => {
+    if (chrome.runtime.lastError) {
+      LOG('sidePanel.open message failed:', chrome.runtime.lastError.message);
+    } else if (!response?.success) {
+      LOG('sidePanel.open failed:', response?.error);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// FAB state machine
+// ---------------------------------------------------------------------------
+
+const FAB_STATES = {
+  idle:       { text: '🐰 Review with ChromeRabbit', disabled: false, cls: '' },
+  loading:    { text: '⏳ Reviewing…',               disabled: false, cls: 'coderabbit-loading' },
+  complete:   (n) => ({ text: `✅ View Review (${n})`, disabled: false, cls: 'coderabbit-complete' }),
+  lgtm:       { text: '✅ LGTM — View Review',       disabled: false, cls: 'coderabbit-complete' },
+  error:      { text: '❌ Review Failed — Retry?',   disabled: false, cls: 'coderabbit-error' },
+};
+
+function setFABState(btn, state) {
+  const s = typeof state === 'function' ? state() : state;
+  btn.textContent = s.text;
+  btn.disabled = s.disabled;
+  btn.className = [BTN_CLASS, s.cls].filter(Boolean).join(' ');
+}
+
+function commentCount(review) {
+  return (review.comments || []).filter(c => c.severity !== 'none').length;
+}
+
+function fabStateFromReview(review) {
+  if (!review) return FAB_STATES.idle;
+  if (review.status === 'reviewing' || review.status === 'pending') return FAB_STATES.loading;
+  if (review.status === 'error') return FAB_STATES.error;
+  if (review.status === 'complete') {
+    const n = commentCount(review);
+    return n > 0 ? FAB_STATES.complete(n) : FAB_STATES.lgtm;
+  }
+  return FAB_STATES.idle;
+}
+
+// ---------------------------------------------------------------------------
+// FAB injection
+// ---------------------------------------------------------------------------
 
 function injectCodeRabbitButton() {
-  if (document.querySelector(`.${BTN_CLASS}`)) {
-    return; // Already injected
-  }
+  if (document.querySelector(`.${BTN_CLASS}`)) return;
 
   const btn = document.createElement('button');
   btn.className = BTN_CLASS;
-  btn.innerHTML = `
-    <span class="cr-icon">🐰</span> Review with CodeRabbit
-  `;
-
+  setFABState(btn, FAB_STATES.idle);
   btn.addEventListener('click', handleReviewClick);
+  document.documentElement.appendChild(btn);
 
-  // Append a floating button to the body directly so it's always visible regardless of DOM changes
-  document.body.appendChild(btn);
+  const pr = getPRFromURL();
+  if (pr) {
+    LOG(`Checking storage for ${pr.owner}/${pr.repo}#${pr.prNumber}`);
+    ReviewStore.load(pr.owner, pr.repo, pr.prNumber).then(review => {
+      if (!document.documentElement.contains(btn)) return;
+      if (review) {
+        LOG(`Found stored review — status: ${review.status}`);
+        setFABState(btn, fabStateFromReview(review));
+      }
+    });
+  }
 }
 
-async function handleReviewClick(e) {
-  const btn = e.currentTarget;
-
-  // Ping the background script to ensure it's awake and responsive
-  try {
-    const isAwake = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: 'PING' }, (response) => {
-        if (chrome.runtime.lastError || !response || !response.success) {
-          resolve(false);
-        } else {
-          resolve(true);
-        }
+function ensureFAB() {
+  if (!location.href.includes('/pull/')) return;
+  const existing = document.querySelector(`.${BTN_CLASS}`);
+  if (!existing) {
+    injectCodeRabbitButton();
+  } else {
+    const pr = getPRFromURL();
+    if (pr) {
+      ReviewStore.load(pr.owner, pr.repo, pr.prNumber).then(review => {
+        const btn = document.querySelector(`.${BTN_CLASS}`);
+        if (btn && review) setFABState(btn, fabStateFromReview(review));
       });
-    });
-
-    if (!isAwake) {
-      btn.innerText = 'Extension asleep 😴 (Refresh page!)';
-      btn.disabled = true;
-      setTimeout(() => {
-        btn.innerHTML = '<span class="cr-icon">🐰</span> Review with CodeRabbit';
-        btn.disabled = false;
-      }, 3000);
-      return;
     }
-  } catch (err) {
-    console.error("Ping failed:", err);
-  }
-
-  btn.classList.add(BTN_LOADING_CLASS);
-  btn.innerText = 'Rabbit is reviewing...';
-  btn.disabled = true;
-
-  try {
-    // Determine the current PR details from the URL
-    // e.g. https://github.com/owner/repo/pull/123
-    const urlParts = window.location.pathname.split('/');
-    const owner = urlParts[1];
-    const repo = urlParts[2];
-    const prNumber = urlParts[4];
-
-    // Run the background script logic instead of fetching here to avoid CORS on patch-diff.githubusercontent.com
-    chrome.runtime.sendMessage({
-      type: 'REQUEST_REVIEW',
-      payload: {
-        owner,
-        repo,
-        prNumber,
-        url: window.location.href
-      }
-    }, (response) => {
-      btn.classList.remove(BTN_LOADING_CLASS);
-      
-      if (chrome.runtime.lastError || !response || !response.success) {
-        btn.innerText = 'Review Failed ❌';
-        const errObj = chrome.runtime.lastError || response?.error;
-        let errorMsg = typeof errObj === 'object' ? errObj.message || JSON.stringify(errObj) : String(errObj);
-        if (errorMsg === "undefined" || errorMsg === "[object Object]") errorMsg = "The background service worker dropped the connection or threw an unhandled exception.";
-        
-        showCrToast("CodeRabbit Review Failed", errorMsg, "error");
-        
-        setTimeout(() => {
-          btn.innerHTML = '<span class="cr-icon">🐰</span> Review with CodeRabbit';
-          btn.disabled = false;
-        }, 3000);
-      } else {
-        btn.innerText = 'Review Requested! ✅';
-        showCrToast("Review Initiated", "The CodeRabbit backend is now processing your PR. Results will appear momentarily.", "success");
-      }
-    });
-
-  } catch (error) {
-    console.error('CodeRabbit Chrome Ext Error:', error);
-    btn.classList.remove(BTN_LOADING_CLASS);
-    btn.innerText = 'Review Failed ❌';
-    showCrToast("CodeRabbit Error", error.message, "error");
-    setTimeout(() => {
-      btn.innerHTML = '<span class="cr-icon">🐰</span> Review with CodeRabbit';
-      btn.disabled = false;
-    }, 3000);
   }
 }
 
-// PREMIUM UI COMPONENTS
+// ---------------------------------------------------------------------------
+// FAB click handler
+// ---------------------------------------------------------------------------
+
+async function handleReviewClick() {
+  const btn = document.querySelector(`.${BTN_CLASS}`);
+  const pr = getPRFromURL();
+  if (!pr) return;
+
+  LOG(`FAB clicked for ${pr.owner}/${pr.repo}#${pr.prNumber}`);
+
+  // If review exists, just open the sidePanel
+  const existing = await ReviewStore.load(pr.owner, pr.repo, pr.prNumber);
+  if (existing && (existing.status === 'complete' || existing.status === 'reviewing' || existing.status === 'pending')) {
+    LOG(`Opening sidePanel for ${existing.status} review`);
+    openSidePanel(pr);
+    return;
+  }
+
+  // Ping background to confirm it's awake
+  const isAwake = await new Promise(resolve => {
+    chrome.runtime.sendMessage({ type: 'PING' }, response => {
+      resolve(!chrome.runtime.lastError && response?.success);
+    });
+  });
+  if (!isAwake) {
+    ERR('Background SW did not respond to PING');
+    showCrToast('Extension asleep', 'Refresh the page and try again.', 'error');
+    return;
+  }
+
+  LOG('Background awake — sending REQUEST_REVIEW');
+  setFABState(btn, FAB_STATES.loading);
+  openSidePanel(pr);
+
+  chrome.runtime.sendMessage(
+    { type: 'REQUEST_REVIEW', payload: pr },
+    (response) => {
+      if (chrome.runtime.lastError || !response?.success) {
+        const msg = chrome.runtime.lastError?.message || response?.error || 'Unknown error';
+        ERR('REQUEST_REVIEW failed:', msg);
+        setFABState(btn, FAB_STATES.error);
+        showCrToast('Review Failed', msg, 'error');
+        return;
+      }
+      LOG('REQUEST_REVIEW response:', JSON.stringify(response.data).substring(0, 80));
+      if (response.data?.cached || response.data?.inProgress) {
+        ReviewStore.load(pr.owner, pr.repo, pr.prNumber).then(review => {
+          if (review) {
+            const b = document.querySelector(`.${BTN_CLASS}`);
+            if (b) setFABState(b, fabStateFromReview(review));
+          }
+        });
+      }
+    }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Incoming messages from background
+// ---------------------------------------------------------------------------
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'REVIEW_RESULT') {
+    const { status } = message.payload;
+    LOG(`REVIEW_RESULT — status: ${status}`);
+    if (status === 'error') {
+      ERR('Review error:', message.payload.message);
+      const btn = document.querySelector(`.${BTN_CLASS}`);
+      if (btn) setFABState(btn, FAB_STATES.error);
+      showCrToast('Review Failed', message.payload.message || 'Unknown error', 'error');
+    }
+  }
+
+  if (message.type === 'REVIEW_UPDATE') {
+    const pr = getPRFromURL();
+    if (pr) {
+      // Update FAB state from storage (sidePanel handles its own rendering via storage listener)
+      ReviewStore.load(pr.owner, pr.repo, pr.prNumber).then(review => {
+        if (!review) return;
+        const btn = document.querySelector(`.${BTN_CLASS}`);
+        if (btn) setFABState(btn, fabStateFromReview(review));
+      });
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Toast notifications
+// ---------------------------------------------------------------------------
+
 function showCrToast(title, message, type = 'success') {
   let container = document.querySelector('.cr-toast-container');
   if (!container) {
@@ -111,115 +217,65 @@ function showCrToast(title, message, type = 'success') {
     container.className = 'cr-toast-container';
     document.body.appendChild(container);
   }
-  
   const toast = document.createElement('div');
   toast.className = `cr-toast ${type}`;
-  
-  const header = document.createElement('div');
-  header.className = 'cr-toast-header';
-  const iconSpan = document.createElement('span');
-  iconSpan.textContent = type === 'error' ? '❌' : '🐰';
-  header.appendChild(iconSpan);
-  header.appendChild(document.createTextNode(' ' + title));
-  
-  const body = document.createElement('div');
-  body.className = 'cr-toast-body';
-  body.textContent = message;
-  
-  toast.appendChild(header);
-  toast.appendChild(body);
-  
+  const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  toast.innerHTML = `
+    <div class="cr-toast-header">${type === 'error' ? '❌' : '🐰'} ${esc(title)}</div>
+    <div class="cr-toast-body">${esc(message)}</div>
+  `;
   container.appendChild(toast);
-  
   setTimeout(() => {
     toast.style.animation = 'cr-slide-out 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards';
     setTimeout(() => toast.remove(), 450);
   }, 6000);
 }
 
-function showCrReviewPanel(resultObj) {
-  let sidebar = document.querySelector('.cr-sidebar');
-  if (!sidebar) {
-    sidebar = document.createElement('div');
-    sidebar.className = 'cr-sidebar';
-    sidebar.innerHTML = `
-      <div class="cr-sidebar-header">
-        <div class="cr-sidebar-title"><span class="cr-icon">🐰</span> CodeRabbit Report</div>
-        <button class="cr-sidebar-close">✕</button>
-      </div>
-      <div class="cr-sidebar-body"></div>
-    `;
-    document.body.appendChild(sidebar);
-    
-    sidebar.querySelector('.cr-sidebar-close').addEventListener('click', () => {
-      sidebar.classList.remove('open');
-    });
-  }
-  
-  const body = sidebar.querySelector('.cr-sidebar-body');
-  body.innerHTML = '';
-  
-  if (resultObj.status === 'success') {
-    const h2 = document.createElement('h2');
-    h2.textContent = 'Review Complete!';
-    
-    const p1 = document.createElement('p');
-    p1.textContent = resultObj.message || 'No direct message passed.';
-    
-    const p2 = document.createElement('p');
-    p2.style.cssText = 'margin-top: 1em; padding-top: 1em; border-top: 1px solid rgba(255,255,255,0.1); color: #9ca3af; font-style: italic;';
-    p2.textContent = 'Note: Currently receiving raw status. We will map full chat/diff annotations into this panel when CodeRabbit WebSocket subscription stream stabilizes.';
-    
-    body.appendChild(h2);
-    body.appendChild(p1);
-    body.appendChild(p2);
-  } else {
-    const h2 = document.createElement('h2');
-    h2.style.color = '#ef4444';
-    h2.textContent = 'Review Processing Failed';
-    const pre = document.createElement('pre');
-    pre.textContent = JSON.stringify(resultObj, null, 2);
-    body.appendChild(h2);
-    body.appendChild(pre);
-  }
-  
-  sidebar.classList.add('open');
+// ---------------------------------------------------------------------------
+// GitHub SPA navigation
+// ---------------------------------------------------------------------------
+
+let lastUrl = location.href;
+
+function prIdFromUrl(url) {
+  const m = url.match(/\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  return m ? `${m[1]}/${m[2]}/${m[3]}` : null;
 }
 
-// GitHub operates as a SPA, so we need to observe DOM changes
+let fabCheckTimer = null;
+
 const observer = new MutationObserver(() => {
-  if (window.location.href.includes('/pull/')) {
-    injectCodeRabbitButton();
+  if (location.href !== lastUrl) {
+    const prevPR = prIdFromUrl(lastUrl);
+    lastUrl = location.href;
+    const currentPR = prIdFromUrl(location.href);
+
+    if (location.href.includes('/pull/')) {
+      if (currentPR !== prevPR) {
+        const existingBtn = document.querySelector(`.${BTN_CLASS}`);
+        if (existingBtn) existingBtn.remove();
+        injectCodeRabbitButton();
+      }
+    } else {
+      const existingBtn = document.querySelector(`.${BTN_CLASS}`);
+      if (existingBtn) existingBtn.remove();
+    }
+    return;
   }
+
+  if (fabCheckTimer) return;
+  fabCheckTimer = setTimeout(() => {
+    fabCheckTimer = null;
+    ensureFAB();
+  }, 200);
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
 
-// Initial check
-if (window.location.href.includes('/pull/')) {
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+
+if (location.href.includes('/pull/')) {
   injectCodeRabbitButton();
-}
-
-
-// --- Listen for review results from Background script ---
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'REVIEW_RESULT') {
-    displayReviewResult(message.payload);
-  }
-  return true;
-});
-
-function displayReviewResult(result) {
-  // Automatically reset the button purely for UX
-  const btn = document.querySelector(`.${BTN_CLASS}`);
-  if (btn) {
-    btn.innerHTML = '<span class="cr-icon">🐰</span> Reviewing Done ✅';
-    setTimeout(() => {
-      btn.innerHTML = '<span class="cr-icon">🐰</span> Review with CodeRabbit';
-      btn.disabled = false;
-    }, 4000);
-  }
-
-  // Open the premium side panel to display the results!
-  showCrReviewPanel(result);
 }
