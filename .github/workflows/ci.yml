@@ -56,12 +56,12 @@ jobs:
       - name: Verify zip contents
         run: |
           echo "=== Files in zip ==="
-          unzip -l chromerabbit.zip
+          unzip -l osshepherd.zip
           echo ""
           echo "=== Checking for files that should NOT be included ==="
           FOUND=0
           for PATTERN in test- .env node_modules Makefile .github .markdownlint eslint.config playwright.config jsconfig DESIGN DEVELOPING MITM agents; do
-            if unzip -l chromerabbit.zip | grep -q "$PATTERN"; then
+            if unzip -l osshepherd.zip | grep -q "$PATTERN"; then
               echo "ERROR: Found '$PATTERN' in zip"
               FOUND=1
             fi
@@ -72,5 +72,5 @@ jobs:
       - name: Upload extension artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chromerabbit-extension
-          path: chromerabbit.zip
+          name: osshepherd-extension
+          path: osshepherd.zip

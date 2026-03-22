@@ -66,7 +66,7 @@ async function init() {
   const ctx = await getPRContext(tabId);
   if (!ctx) {
     // No sidePanel context — try to find a review for this tab's URL
-    showEmpty('Click "Review with ChromeRabbit" on a GitHub PR.');
+    showEmpty('Click "Review with OSShepherd" on a GitHub PR.');
     return;
   }
 
@@ -111,7 +111,7 @@ function mountApp(review, _prContext) {
   globalThis.navigateToFileLine = (pr, filename, line) => navigateTab(pr, filename, line);
 
   render(
-    html`<${Sidebar} initialTab="summary" onClose=${onClose} onRerun=${onRerun} />`,
+    html`<${Sidebar} initialTab="files" onClose=${onClose} onRerun=${onRerun} />`,
     mountTarget
   );
 }

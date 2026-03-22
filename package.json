@@ -1,15 +1,17 @@
 {
-  "name": "chromerabbit",
+  "name": "osshepherd",
   "version": "1.0.0",
   "main": "background.js",
-  "description": "Chrome extension to trigger CodeRabbit AI reviews on GitHub pull requests without leaving the browser.",
-  "author": "ChromeRabbit Contributors",
+  "description": "OSShepherd — a Chrome extension for open-source maintainers to trigger CodeRabbit AI reviews on GitHub PRs.",
+  "author": "OSShepherd Contributors",
   "keywords": [
-    "chromerabbit",
+    "osshepherd",
     "browser-extension",
     "coderabbit",
     "github-pr",
-    "code-review"
+    "code-review",
+    "oss",
+    "maintainer"
   ],
   "scripts": {
     "test": "node --test test/unit/*.test.js",
@@ -34,6 +36,7 @@
   },
   "homepage": "https://github.com/strawgate/chromerabbit#readme",
   "devDependencies": {
+    "@playwright/mcp": "^0.0.68",
     "@playwright/test": "^1.58.2",
     "@types/chrome": "^0.1.38",
     "eslint": "^10.1.0",

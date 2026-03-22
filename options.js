@@ -35,12 +35,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loginBtn.addEventListener('click', async () => {
     loginBtn.disabled = true;
-    loginBtn.innerHTML = '<span class="spinner"></span>Waiting for login...';
-    showStatus('A login tab will open. Please sign in with CodeRabbit.', 'success');
+    loginBtn.innerHTML = '<span class="spinner"></span>Connecting to CodeRabbit™...';
+    showStatus('A login tab will open. Please sign in with your CodeRabbit account.', 'success');
 
     chrome.runtime.sendMessage({ type: 'START_OAUTH_LOGIN' }, (response) => {
       loginBtn.disabled = false;
-      loginBtn.innerHTML = 'Sign in with CodeRabbit';
+      loginBtn.innerHTML = 'Sign in with CodeRabbit™';
 
       if (chrome.runtime.lastError) {
         showStatus(chrome.runtime.lastError.message || 'Login failed', 'error');

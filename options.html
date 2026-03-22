@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ChromeRabbit Settings</title>
+  <title>OSShepherd Settings</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -12,7 +12,7 @@
       --border-color: #30363d;
       --text-main: #c9d1d9;
       --text-muted: #8b949e;
-      --accent: #ff6a00;
+      --accent: #2d6a4f;
       --green: #3fb950;
       --red: #f85149;
     }
@@ -77,16 +77,15 @@
 </head>
 <body>
   <div class="container">
-    <h1>🐰 ChromeRabbit Settings</h1>
-    <p class="desc">Sign in with your CodeRabbit account to enable AI-powered PR reviews.</p>
-    <p style="font-size:10px;color:var(--text-muted);text-align:center;margin-bottom:16px;">ChromeRabbit is a community project — not affiliated with or endorsed by CodeRabbit.</p>
+    <h1>🐑 OSShepherd Settings</h1>
+    <p class="desc">Sign in with your CodeRabbit™ account to enable AI-powered PR reviews via OSShepherd.</p>
 
     <div class="auth-card" id="authCard">
       <div class="auth-status" id="authStatus">Not signed in</div>
       <div class="auth-user" id="authUser" style="display:none"></div>
     </div>
 
-    <button id="loginBtn">Sign in with CodeRabbit</button>
+    <button id="loginBtn">Sign in with CodeRabbit™</button>
     <button id="logoutBtn">Sign Out</button>
 
     <div class="status" id="statusMessage"></div>
@@ -101,6 +100,11 @@
       <h3>Debug Info</h3>
       <pre id="debugInfo" style="background:var(--bg-color);border:1px solid var(--border-color);border-radius:6px;padding:12px;font-size:12px;color:var(--text-muted);overflow-x:auto;white-space:pre-wrap;max-height:200px;overflow-y:auto;">Loading...</pre>
     </div>
+    <hr class="divider">
+    <p style="font-size: 11px; color: var(--text-muted); text-align: center; line-height: 1.5;">
+      OSShepherd is not affiliated with, endorsed by, or sponsored by CodeRabbit, Inc.<br>
+      CodeRabbit™ is a trademark of CodeRabbit, Inc.
+    </p>
   </div>
   <script src="utils/review-store.js"></script>
   <script src="options.js"></script>

@@ -4,7 +4,7 @@
   bottom: 30px !important;
   right: 30px !important;
   z-index: 999999 !important;
-  background: linear-gradient(135deg, #ff6a00 0%, #ff8c3a 100%) !important;
+  background: linear-gradient(135deg, #2d6a4f 0%, #40916c 100%) !important;
   color: #ffffff !important;
   border: none !important;
   border-radius: 50px !important;
@@ -16,17 +16,17 @@
   align-items: center !important;
   gap: 10px !important;
   cursor: pointer !important;
-  box-shadow: 0 8px 25px rgba(255, 106, 0, 0.4) !important;
+  box-shadow: 0 8px 25px rgba(45, 106, 79, 0.4) !important;
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
 }
 .coderabbit-fab:hover {
   transform: translateY(-5px) scale(1.02) !important;
-  box-shadow: 0 12px 30px rgba(255, 106, 0, 0.5) !important;
-  background: linear-gradient(135deg, #ff7a1a 0%, #ff9a55 100%) !important;
+  box-shadow: 0 12px 30px rgba(45, 106, 79, 0.5) !important;
+  background: linear-gradient(135deg, #40916c 0%, #52b788 100%) !important;
 }
 .coderabbit-fab:active {
   transform: translateY(2px) scale(0.98) !important;
-  box-shadow: 0 5px 15px rgba(255, 106, 0, 0.4) !important;
+  box-shadow: 0 5px 15px rgba(45, 106, 79, 0.4) !important;
 }
 
 /* FAB states */
@@ -52,9 +52,9 @@
 }
 
 @keyframes cr-fab-pulse {
-  0% { transform: scale(1); box-shadow: 0 8px 25px rgba(255, 106, 0, 0.4); }
-  50% { transform: scale(1.05); box-shadow: 0 12px 35px rgba(255, 106, 0, 0.6); }
-  100% { transform: scale(1); box-shadow: 0 8px 25px rgba(255, 106, 0, 0.4); }
+  0% { transform: scale(1); box-shadow: 0 8px 25px rgba(45, 106, 79, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 12px 35px rgba(45, 106, 79, 0.6); }
+  100% { transform: scale(1); box-shadow: 0 8px 25px rgba(45, 106, 79, 0.4); }
 }
 
 /* Toast notifications */

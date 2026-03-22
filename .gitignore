@@ -2,7 +2,7 @@ node_modules/
 .env
 .DS_Store
 capture_ws.py
-chromerabbit.zip
+osshepherd.zip
 test-results/
 plans/
 .trace

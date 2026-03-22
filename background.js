@@ -71,7 +71,7 @@ function updateBadge(tabId, review) {
   }
   if (review.status === 'reviewing') {
     chrome.action.setBadgeText({ text: '...', tabId });
-    chrome.action.setBadgeBackgroundColor({ color: '#ff6a00', tabId });
+    chrome.action.setBadgeBackgroundColor({ color: '#2d6a4f', tabId });
     return;
   }
   if (review.status === 'error') {
@@ -102,6 +102,11 @@ function sendToTab(tabId, message) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'PING') {
     sendResponse({ success: true });
+    return false;
+  }
+
+  if (request.type === 'OPEN_OPTIONS') {
+    chrome.runtime.openOptionsPage();
     return false;
   }
 
@@ -227,7 +232,7 @@ async function handleOAuthLogin() {
         const url = changeInfo.url || tab.url || '';
         if (!url) return;
 
-        console.log('[OAuth] Tab URL:', url.substring(0, 120));
+        console.log('[OSShepherd OAuth] Tab URL:', url.substring(0, 120));
 
         // Catch the code from EITHER:
         // 1. app.coderabbit.ai/login?code=XXX&state=github (GitHub OAuth callback to CodeRabbit)
@@ -258,7 +263,7 @@ async function handleOAuthLogin() {
         chrome.tabs.update(tabId, { url: 'about:blank' });
         setTimeout(() => chrome.tabs.remove(tabId).catch(() => {}), 500);
 
-        console.log('[OAuth] Intercepted auth code! Exchanging for tokens...');
+        console.log('[OSShepherd OAuth] Intercepted auth code. Exchanging for tokens...');
 
         try {
           const exchangeUrl = 'https://app.coderabbit.ai/trpc/accessToken.getAccessAndRefreshToken?input=' +
@@ -314,7 +319,7 @@ async function handleOAuthLogin() {
             console.warn('[OAuth] Failed to fetch profile after login:', e.message);
           }
 
-          console.log('[OAuth] Login successful! Access token stored.');
+          console.log('[OSShepherd OAuth] Login successful. Access token stored.');
           resolve({ success: true });
         } catch (err) {
           reject(err);
@@ -342,7 +347,7 @@ async function setupOffscreenDocument(path) {
     creating = chrome.offscreen.createDocument({
       url: path,
       reasons: ['DOM_PARSER'],
-      justification: 'WebSocket to CodeRabbit API (Chromium SW WS header bug workaround)',
+      justification: 'WebSocket to CodeRabbit API via OSShepherd (Chromium SW WS header bug workaround)',
     });
     await creating;
     creating = null;
@@ -375,7 +380,7 @@ async function handleRequestReview(payload, ghTabId) {
   const token = (storageItem.accessToken || storageItem.coderabbitToken || '').trim();
 
   if (!token) {
-    throw new Error("Not signed in. Please sign in via the extension options page.");
+    throw new Error("Not signed in. Please sign in via the OSShepherd options page.");
   }
 
   // Auto-fetch org if not already stored

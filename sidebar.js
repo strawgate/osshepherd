@@ -1,5 +1,5 @@
 /**
- * sidebar.js — Preact components for the ChromeRabbit review sidebar.
+ * sidebar.js — Preact components for the OSShepherd review sidebar.
  *
  * Loaded by sidepanel.html (chrome.sidePanel page).
  * Depends on: vendor/preact-htm.js, utils/markdown.js
@@ -45,6 +45,18 @@ async function sha256Hex(str) {
 function stripAIHeader(text) {
   if (!text) return '';
   return text.replace(/^##\s+AI-generated summary of changes\n\n?/, '').trim();
+}
+
+/** Extract "Estimated code review effort: X" from a file summary. Returns null or lowercase level. */
+function parseEffort(text) {
+  if (!text) return null;
+  const m = text.match(/Estimated code review effort:\s*(\d+)\s*\[(\w+)\]/i)
+         || text.match(/Estimated code review effort:\s*(\w+)/i);
+  if (!m) return null;
+  // Match either "3 [High]" or "High"
+  const raw = (m[2] || m[1]).toLowerCase();
+  if (['high', 'medium', 'low', 'trivial', 'minimal'].includes(raw)) return raw === 'minimal' ? 'trivial' : raw;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +129,7 @@ const reviewSignal = signal(null);
 
 function navigateToFileLine(pr, filename, startLine) {
   if (!pr || !filename) return;
-  chrome.storage.session.set({ crReopenSidebar: 'comments' });
+  chrome.storage.session.set({ crReopenSidebar: 'feedback' });
   sha256Hex(filename).then(hash => {
     const anchor = startLine ? `R${startLine}` : '';
     window.location.href = `/${pr.owner}/${pr.repo}/pull/${pr.prNumber}/files#diff-${hash}${anchor}`;
@@ -138,7 +150,7 @@ function SeverityBadge({ severity }) {
   return html`<span class="cr-severity cr-severity-${s}">${s}</span>`;
 }
 
-function CopyButton({ text, label = '📋 Copy', copiedLabel = '✓ Copied', title }) {
+function CopyButton({ text, label = '📋 Copy', copiedLabel = '✓ Copied', title, class: cls }) {
   const [copied, setCopied] = useState(false);
   const onClick = useCallback((e) => {
     e.stopPropagation();
@@ -147,7 +159,8 @@ function CopyButton({ text, label = '📋 Copy', copiedLabel = '✓ Copied', tit
       setTimeout(() => setCopied(false), 2000);
     });
   }, [text]);
-  return html`<button class="cr-action-btn ${copied ? 'copied' : ''}" onClick=${onClick} title=${title || ''}>
+  const classes = ['cr-action-btn', copied ? 'copied' : '', cls].filter(Boolean).join(' ');
+  return html`<button class=${classes} onClick=${onClick} title=${title || ''}>
     ${copied ? copiedLabel : label}
   </button>`;
 }
@@ -158,7 +171,7 @@ function CopyButton({ text, label = '📋 Copy', copiedLabel = '✓ Copied', tit
 
 const STAGES = ['setup', 'summarizing', 'reviewing', 'complete'];
 const STAGE_LABELS = { setup: 'Setup', summarizing: 'Summarize', reviewing: 'Review', complete: 'Done' };
-const STAGE_TABS = { setup: 'setup', summarizing: 'summary', reviewing: 'comments', complete: 'summary' };
+const STAGE_TABS = { setup: 'setup', summarizing: 'files', reviewing: 'feedback', complete: 'files' };
 
 function Toolbar({ review, onRerun }) {
   const { onSwitchTab } = useContext(SidebarContext);
@@ -238,7 +251,7 @@ function HeroStat({ review, meta }) {
   const isZero = actionable.length === 0;
 
   const onClick = useCallback(() => {
-    if (actionable.length > 0) onSwitchTab('comments');
+    if (actionable.length > 0) onSwitchTab('feedback');
   }, [actionable.length, onSwitchTab]);
 
   return html`
@@ -260,7 +273,7 @@ function HeroStat({ review, meta }) {
         </div>
       </div>
       ${meta?.agentPrompt && html`
-        <${CopyButton} text=${meta.agentPrompt} label="🤖" copiedLabel="✓" title="Copy AI prompt to fix these issues" />
+        <${CopyButton} text=${meta.agentPrompt} label="🤖" copiedLabel="✓" title="Copy AI prompt to fix these issues" class="cr-copy-prompt-btn" />
       `}
     </div>
   `;
@@ -269,10 +282,12 @@ function HeroStat({ review, meta }) {
 function FileSummaryCard({ filename, summary, isStreaming }) {
   const { onNavigate } = useContext(SidebarContext);
   const [expanded, setExpanded] = useState(false);
+  const effort = useMemo(() => parseEffort(summary), [summary]);
   return html`
     <div class="cr-stream-card ${isStreaming ? 'cr-stream-enter' : ''}">
       <div class="cr-stream-file cr-clickable-file" onClick=${() => onNavigate(filename, '')}>
-        ${filename}
+        <span class="cr-stream-file-name">${filename}</span>
+        ${effort && html`<span class="cr-effort-badge cr-effort-${effort}">${effort} effort</span>`}
       </div>
       <div class="cr-stream-body cr-md ${expanded ? '' : 'cr-preview'}">
         <${Markdown} text=${stripAIHeader(summary)} />
@@ -284,10 +299,66 @@ function FileSummaryCard({ filename, summary, isStreaming }) {
   `;
 }
 
-function SummaryPanel({ review }) {
+function FileSummariesSection({ fileEntries, isStreaming, elapsed }) {
+  const effortCounts = useMemo(() => {
+    const counts = {};
+    for (const [, summary] of fileEntries) {
+      const e = parseEffort(summary);
+      if (e) counts[e] = (counts[e] || 0) + 1;
+    }
+    return counts;
+  }, [fileEntries]);
+  const hasEffort = Object.keys(effortCounts).length > 0;
+  const effortOrder = ['high', 'medium', 'low', 'trivial'];
+
+  return html`
+    <div class="cr-timeline-divider">
+      <span class="cr-timeline-line" />
+      <span class="cr-timeline-label">
+        ${isStreaming
+          ? html`<span class="cr-emoji">📝</span> File Summaries${elapsed !== null ? ` · ${elapsed}s` : ''}`
+          : html`<span class="cr-emoji">📝</span> ${fileEntries.length} File${fileEntries.length !== 1 ? 's' : ''} Analyzed`}
+      </span>
+      <span class="cr-timeline-line" />
+    </div>
+    ${hasEffort && !isStreaming && html`
+      <div class="cr-effort-bar">
+        <span class="cr-effort-label">Review Effort</span>
+        ${effortOrder.filter(e => effortCounts[e]).map(e => html`
+          <span class="cr-effort-badge cr-effort-${e}">${effortCounts[e]} ${e}</span>
+        `)}
+      </div>
+    `}
+    ${fileEntries.map(([fn, s]) => html`
+      <${FileSummaryCard} key=${fn} filename=${fn} summary=${s} isStreaming=${isStreaming} />
+    `)}
+  `;
+}
+
+/** Above-tabs overview: PR title + actionable findings hero. */
+function ReviewOverview({ review }) {
   const meta = useMemo(() => review.summary ? parseSummaryMeta(review.summary) : null, [review.summary]);
+  if (!review.prTitle && !meta) return null;
+  return html`
+    <div class="cr-overview">
+      ${review.prTitle && html`
+        <div class="cr-pr-title-row">
+          <p class="cr-pr-title">
+            <span class="cr-pr-title-label">Suggested Title</span>
+            ${review.prTitle}
+          </p>
+          <${CopyButton} text=${review.prTitle} label="📋" copiedLabel="✓" title="Copy suggested title" />
+        </div>
+      `}
+      ${meta && html`<${HeroStat} review=${review} meta=${meta} />`}
+    </div>
+  `;
+}
+
+function FileSummariesPanel({ review }) {
   const fileEntries = useMemo(() => Object.entries(review.fileSummaries || {}), [review.fileSummaries]);
   const isStreaming = review.status === 'reviewing' || review.status === 'pending';
+  const meta = useMemo(() => review.summary ? parseSummaryMeta(review.summary) : null, [review.summary]);
 
   // Timestamp for file summaries
   const summaryEvent = (review.rawEvents || []).find(e =>
@@ -297,36 +368,18 @@ function SummaryPanel({ review }) {
     ? Math.round((summaryEvent.payload.timestamp - review.startedAt) / 1000)
     : null;
 
-  if (!review.prTitle && !review.summary && !fileEntries.length) {
-    return html`<div class="cr-empty">Waiting for review…</div>`;
+  if (!fileEntries.length && !review.summary) {
+    return html`<div class="cr-empty">Waiting for file summaries…</div>`;
   }
 
   return html`
-    ${review.prTitle && html`
-      <p class="cr-pr-title">
-        <span class="cr-pr-title-label">Suggested Title</span>
-        ${review.prTitle}
-      </p>
-    `}
-    ${meta && html`<${HeroStat} review=${review} meta=${meta} />`}
     ${!meta && review.summary && html`
       <div class="cr-summary-text cr-md">
         <${Markdown} text=${review.summary} />
       </div>
     `}
     ${fileEntries.length > 0 && html`
-      <div class="cr-timeline-divider">
-        <span class="cr-timeline-line" />
-        <span class="cr-timeline-label">
-          ${isStreaming
-            ? `📝 File Summaries${elapsed !== null ? ` · ${elapsed}s` : ''}`
-            : `📝 ${fileEntries.length} File${fileEntries.length !== 1 ? 's' : ''} Analyzed`}
-        </span>
-        <span class="cr-timeline-line" />
-      </div>
-      ${fileEntries.map(([fn, s]) => html`
-        <${FileSummaryCard} key=${fn} filename=${fn} summary=${s} isStreaming=${isStreaming} />
-      `)}
+      <${FileSummariesSection} fileEntries=${fileEntries} isStreaming=${isStreaming} elapsed=${elapsed} />
     `}
   `;
 }
@@ -415,7 +468,7 @@ function CommentsPanel({ review }) {
     ${lgtm.length > 0 && html`
       <div class="cr-timeline-divider" style="margin-top:16px">
         <span class="cr-timeline-line" />
-        <span class="cr-timeline-label">✅ ${lgtm.length} LGTM</span>
+        <span class="cr-timeline-label"><span class="cr-emoji">✅</span> ${lgtm.length} LGTM</span>
         <span class="cr-timeline-line" />
       </div>
       ${lgtm.map((c, i) => html`<${CommentCard} key=${c.fingerprint || 'lgtm-' + i} comment=${c} />`)}
@@ -508,7 +561,7 @@ function SetupPanel({ review }) {
  */
 function Sidebar({ initialTab, onClose, onRerun }) {
   const review = reviewSignal.value;
-  const [activeTab, setActiveTab] = useState(initialTab || 'summary');
+  const [activeTab, setActiveTab] = useState(initialTab || 'files');
   const pr = useMemo(
     () => review ? { owner: review.owner, repo: review.repo, prNumber: review.prNumber } : null,
     [review?.owner, review?.repo, review?.prNumber]
@@ -543,20 +596,23 @@ function Sidebar({ initialTab, onClose, onRerun }) {
         <button class="cr-close" onClick=${onClose}>✕</button>
       </div>
       <${Toolbar} review=${review} onRerun=${onRerun} />
+      <${ReviewOverview} review=${review} />
       <div class="cr-tabs">
-        ${['summary', 'comments', 'raw', 'setup'].map(tab => html`
+        ${['files', 'feedback', 'setup'].map(tab => html`
           <button key=${tab} class="cr-tab ${activeTab === tab ? 'active' : ''}" onClick=${() => switchTab(tab)}>
-            ${tab === 'comments' ? html`Comments <span class="cr-tab-badge">${actionableCount}</span>` :
-              tab === 'summary' ? 'Summary' : tab === 'raw' ? 'Raw' : 'Setup'}
+            ${tab === 'feedback' ? html`Feedback <span class="cr-tab-badge">${actionableCount}</span>` :
+              tab === 'files' ? 'File Summaries' : 'Setup'}
           </button>
         `)}
+        <span class="cr-tab-spacer" />
+        <button class="cr-tab cr-tab-secondary ${activeTab === 'raw' ? 'active' : ''}" onClick=${() => switchTab('raw')}>Raw</button>
       </div>
       <div class="cr-panels">
-        <div class="cr-panel ${activeTab === 'summary' ? 'active' : ''}">
-          <${ErrorBoundary} label="Summary"><${SummaryPanel} review=${review} /><//>
+        <div class="cr-panel ${activeTab === 'files' ? 'active' : ''}">
+          <${ErrorBoundary} label="File Summaries"><${FileSummariesPanel} review=${review} /><//>
         </div>
-        <div class="cr-panel ${activeTab === 'comments' ? 'active' : ''}">
-          <${ErrorBoundary} label="Comments"><${CommentsPanel} review=${review} /><//>
+        <div class="cr-panel ${activeTab === 'feedback' ? 'active' : ''}">
+          <${ErrorBoundary} label="Feedback"><${CommentsPanel} review=${review} /><//>
         </div>
         <div class="cr-panel ${activeTab === 'raw' ? 'active' : ''}">
           <${ErrorBoundary} label="Raw"><${RawPanel} review=${review} /><//>

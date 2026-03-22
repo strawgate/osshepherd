@@ -1,5 +1,5 @@
 /**
- * content.js — Orchestrator for the ChromeRabbit extension on GitHub PR pages.
+ * content.js — Orchestrator for the OSShepherd extension on GitHub PR pages.
  *
  * Responsibilities:
  *  - FAB button injection and state machine
@@ -48,7 +48,7 @@ function openSidePanel(pr) {
 // ---------------------------------------------------------------------------
 
 const FAB_STATES = {
-  idle:       { text: '🐰 Review with ChromeRabbit', disabled: false, cls: '' },
+  idle:       { text: '🐑 Review with OSShepherd', disabled: false, cls: '' },
   loading:    { text: '⏳ Reviewing…',               disabled: false, cls: 'coderabbit-loading' },
   complete:   (n) => ({ text: `✅ View Review (${n})`, disabled: false, cls: 'coderabbit-complete' }),
   lgtm:       { text: '✅ LGTM — View Review',       disabled: false, cls: 'coderabbit-complete' },
@@ -160,8 +160,13 @@ async function handleReviewClick() {
       if (chrome.runtime.lastError || !response?.success) {
         const msg = chrome.runtime.lastError?.message || response?.error || 'Unknown error';
         ERR('REQUEST_REVIEW failed:', msg);
-        setFABState(btn, FAB_STATES.error);
-        showCrToast('Review Failed', msg, 'error');
+        setFABState(btn, FAB_STATES.idle);
+        if (msg.includes('Not signed in')) {
+          showCrToast('Sign in Required', 'Opening OSShepherd settings…', 'error');
+          chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' });
+        } else {
+          showCrToast('Review Failed', msg, 'error');
+        }
         return;
       }
       LOG('REQUEST_REVIEW response:', JSON.stringify(response.data).substring(0, 80));
@@ -221,7 +226,7 @@ function showCrToast(title, message, type = 'success') {
   toast.className = `cr-toast ${type}`;
   const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   toast.innerHTML = `
-    <div class="cr-toast-header">${type === 'error' ? '❌' : '🐰'} ${esc(title)}</div>
+    <div class="cr-toast-header">${type === 'error' ? '❌' : '🐑'} ${esc(title)}</div>
     <div class="cr-toast-body">${esc(message)}</div>
   `;
   container.appendChild(toast);

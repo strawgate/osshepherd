@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ChromeRabbit PR Review",
-  "short_name": "ChromeRabbit",
-  "description": "Community extension — trigger CodeRabbit AI reviews on GitHub PRs, triage findings by severity, and navigate to code. Not affiliated with CodeRabbit.",
+  "name": "OSShepherd for CodeRabbit™",
+  "short_name": "OSShepherd",
+  "description": "One-click AI code reviews on any GitHub PR, powered by CodeRabbit™. Built for open-source maintainers.",
   "version": "1.0.0",
   "icons": {
     "16": "icons/icon16.png",
@@ -41,7 +41,7 @@
   "options_page": "options.html",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "ChromeRabbit Reviews",
+    "default_title": "OSShepherd Reviews",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"

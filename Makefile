@@ -1,4 +1,4 @@
-# ChromeRabbit - Developer Makefile
+# OSShepherd - Developer Makefile
 
 .PHONY: all test test-e2e lint zip clean help
 
@@ -17,9 +17,9 @@ test-e2e:
 # Package extension for Chrome Web Store upload.
 # Only includes files needed at runtime — no tests, docs, or dev tooling.
 zip:
-	@echo "Building chromerabbit.zip…"
-	@rm -f chromerabbit.zip
-	@zip -r chromerabbit.zip \
+	@echo "Building osshepherd.zip…"
+	@rm -f osshepherd.zip
+	@zip -r osshepherd.zip \
 		manifest.json \
 		background.js \
 		content.js \
@@ -38,10 +38,10 @@ zip:
 		icons/icon*.png \
 		vendor/preact-htm.js \
 		utils/
-	@echo "Done — $$(du -h chromerabbit.zip | cut -f1)"
+	@echo "Done — $$(du -h osshepherd.zip | cut -f1)"
 
 clean:
-	@rm -f *.log *.trace chromerabbit.zip
+	@rm -f *.log *.trace osshepherd.zip
 
 help:
 	@echo "Available commands:"

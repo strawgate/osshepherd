@@ -281,6 +281,22 @@ describe('applyEvent — additional_details', () => {
     assert.equal(r.comments.length, 1);
   });
 
+  it('allows same fingerprint on different files (CodeRabbit reuses fingerprints)', () => {
+    let r = ReviewStore.createRecord('o', 'r', '1', 'id');
+    r = ReviewStore.applyEvent(r, {
+      type: 'additional_details',
+      payload: {
+        additionalComments: {
+          'a.go': [{ filename: 'a.go', startLine: 1, severity: 'none', fingerprint: 'phantom:triton:puma' }],
+          'b.go': [{ filename: 'b.go', startLine: 5, severity: 'none', fingerprint: 'phantom:triton:puma' }],
+          'c.go': [{ filename: 'c.go', startLine: 10, severity: 'minor', fingerprint: 'phantom:triton:puma' }],
+        },
+        assertiveComments: {},
+      },
+    });
+    assert.equal(r.comments.length, 3, 'same fingerprint but different files should all be kept');
+  });
+
   it('merges assertive and additional comments', () => {
     const r = ReviewStore.createRecord('o', 'r', '1', 'id');
     const r2 = ReviewStore.applyEvent(r, {

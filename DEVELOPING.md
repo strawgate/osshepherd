@@ -1,6 +1,6 @@
-# Developing ChromeRabbit
+# Developing OSShepherd
 
-ChromeRabbit is a Chrome extension that brings CodeRabbit AI code reviews directly into the GitHub PR interface.
+OSShepherd is a Chrome extension that brings CodeRabbit™ AI code reviews directly into the GitHub PR interface.
 
 ## Architecture
 

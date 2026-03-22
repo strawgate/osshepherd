@@ -81,9 +81,9 @@ function render(reviews) {
     headerCount.style.display = 'none';
     list.innerHTML = `
       <div class="empty">
-        <span class="empty-icon">🐰</span>
+        <span class="empty-icon">🐑</span>
         <span>No reviews yet.</span>
-        <span class="empty-hint">Navigate to a GitHub PR and click<br>the ChromeRabbit button to start a review.</span>
+        <span class="empty-hint">Navigate to a GitHub PR and click<br>the OSShepherd button to start a review.</span>
       </div>`;
     return;
   }

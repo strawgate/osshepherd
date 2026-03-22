@@ -123,45 +123,40 @@ function applyEvent(record, event) {
     }
 
     case 'review_comment': {
-      // Streaming preview — only append if additional_details hasn't arrived yet.
-      // Use fingerprint to deduplicate if present.
-      const fingerprint = payload?.fingerprint;
-      const alreadyPresent = fingerprint
-        ? r.comments.some(c => c.fingerprint === fingerprint)
-        : false;
-      if (!alreadyPresent && payload?.filename) {
-        r.comments.push(normalizeComment(payload, 'assertive'));
+      // Streaming — CodeRabbit sends the same comment repeatedly as it refines.
+      // Deduplicate by composite key (fingerprint alone is NOT unique per-comment;
+      // CodeRabbit reuses fingerprints like "phantom:triton:puma" across files).
+      if (payload?.filename) {
+        const key = commentKey(payload);
+        const alreadyPresent = r.comments.some(c => commentKey(c) === key);
+        if (!alreadyPresent) {
+          r.comments.push(normalizeComment(payload, 'assertive'));
+        }
       }
       break;
     }
 
     case 'additional_details': {
       // additional_details is supplementary — it does NOT replace streaming review_comments.
-      // Per the VS Code extension: review_comment events are the primary actionable findings.
-      // additional_details contains:
-      //   assertiveComments  — "nitpick" comments (opinionated but useful)
-      //   additionalComments — supplementary (LGTM, context notes)
-      //   outsideDiffRangeComments, duplicateComments — not displayed
-      //
-      // We append assertiveComments (nitpicks) to the existing comment list,
-      // deduplicating by fingerprint. additionalComments with severity !== 'none'
-      // are also included (some servers put actionable findings here).
+      // Contains assertiveComments (nitpicks) and additionalComments (LGTM, context).
       const assertMap = payload?.assertiveComments || {};
       const addMap = payload?.additionalComments || {};
-      const existingFingerprints = new Set(r.comments.map(c => c.fingerprint).filter(Boolean));
+      const existingKeys = new Set(r.comments.map(c => commentKey(c)));
 
       for (const [, comments] of Object.entries(assertMap)) {
         for (const c of comments) {
-          if (c.fingerprint && existingFingerprints.has(c.fingerprint)) continue;
+          const k = commentKey(c);
+          if (existingKeys.has(k)) continue;
           r.comments.push(normalizeComment(c, 'assertive'));
-          if (c.fingerprint) existingFingerprints.add(c.fingerprint);
+          existingKeys.add(k);
         }
       }
       for (const [, comments] of Object.entries(addMap)) {
         for (const c of comments) {
-          if (c.fingerprint && existingFingerprints.has(c.fingerprint)) continue;
+          const k = commentKey(c);
+          if (existingKeys.has(k)) continue;
           r.comments.push(normalizeComment(c, 'additional'));
-          if (c.fingerprint) existingFingerprints.add(c.fingerprint);
+          existingKeys.add(k);
         }
       }
       break;
@@ -178,6 +173,11 @@ function applyEvent(record, event) {
   }
 
   return r;
+}
+
+/** Composite dedup key — fingerprint alone is NOT unique (CodeRabbit reuses them across files). */
+function commentKey(c) {
+  return `${c.fingerprint || ''}:${c.filename || ''}:${c.startLine ?? ''}`;
 }
 
 function normalizeComment(raw, defaultType) {

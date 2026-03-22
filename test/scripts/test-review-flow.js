@@ -81,7 +81,7 @@ const { generateUUID } = require('./utils/utils');
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
-  console.log(`\n🐰 CodeRabbit E2E Test — ${owner}/${repo}#${prNumber}\n`);
+  console.log(`\n🐑 OSShepherd E2E Test — ${owner}/${repo}#${prNumber}\n`);
 
   // 1. Fetch the real PR diff
   const diffUrl = `https://patch-diff.githubusercontent.com/raw/${owner}/${repo}/pull/${prNumber}.diff`;
