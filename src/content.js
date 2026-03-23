@@ -138,15 +138,21 @@ async function handleReviewClick() {
     return;
   }
 
-  // Ping background to confirm it's awake
-  const isAwake = await new Promise(resolve => {
-    chrome.runtime.sendMessage({ type: 'PING' }, response => {
-      resolve(!chrome.runtime.lastError && response?.success);
+  // Ping background — retry a few times since the SW may need to wake up
+  let isAwake = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    isAwake = await new Promise(resolve => {
+      chrome.runtime.sendMessage({ type: 'PING' }, response => {
+        resolve(!chrome.runtime.lastError && response?.success);
+      });
     });
-  });
+    if (isAwake) break;
+    LOG(`PING attempt ${attempt + 1} failed, retrying…`);
+    await new Promise(r => setTimeout(r, 500));
+  }
   if (!isAwake) {
-    ERR('Background SW did not respond to PING');
-    showCrToast('Extension asleep', 'Refresh the page and try again.', 'error');
+    ERR('Background SW did not respond after 3 attempts');
+    showCrToast('Extension not responding', 'Try refreshing the page. If that doesn\'t work, disable and re-enable the extension.', 'error');
     return;
   }
 
