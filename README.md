@@ -53,7 +53,7 @@ npm install
 ### Build for distribution
 
 ```bash
-make zip          # produces osshepherd.zip (~92KB)
+make zip          # produces osshepherd.zip
 ```
 
 ## Development

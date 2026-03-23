@@ -104,4 +104,4 @@ node scripts/launch-extension-cdp.js
 - **No `chrome.storage` in offscreen** — only `chrome.runtime` is available. All storage operations go through `src/background.js`
 - **No `window` in service worker** — use `globalThis` instead
 - **DNR rules** — header removal is in `src/rules.json` (static) + `src/background.js` (dynamic per-review auth headers)
-- **Fingerprint dedup** — CodeRabbit reuses fingerprints across files. Dedup key is `fingerprint:filename:startLine`, not fingerprint alone
+- **Fingerprint dedup** — CodeRabbit reuses fingerprints across files (e.g. `phantom:triton:puma` appears on 50+ files). Dedup key is `fingerprint:filename:startLine` (e.g. `phantom:triton:puma:src/background.js:33`), not fingerprint alone

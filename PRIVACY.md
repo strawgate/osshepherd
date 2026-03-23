@@ -18,7 +18,7 @@ OSShepherd does not operate servers that collect or store your data. All data ha
 
 OSShepherd connects to **CodeRabbit** (`app.coderabbit.ai` and `ide.coderabbit.ai`) to authenticate and stream AI code reviews. This communication is between your browser and CodeRabbit's servers — OSShepherd does not proxy, log, or store this traffic beyond caching review results locally for your convenience.
 
-Your use of CodeRabbit is governed by [CodeRabbit's privacy policy](https://www.coderabbit.ai/privacy-policy). OSShepherd has no access to your CodeRabbit account beyond the OAuth token you grant during sign-in.
+Your use of CodeRabbit is governed by [CodeRabbit's privacy policy](https://www.coderabbit.ai/privacy-policy). OSShepherd accesses CodeRabbit only via the OAuth token you authorize and never accesses your account credentials directly.
 
 OSShepherd also fetches PR diffs from **GitHub** (`patch-diff.githubusercontent.com`) to send to CodeRabbit for review. No GitHub data is sent anywhere other than directly to CodeRabbit's API.
 
@@ -32,7 +32,9 @@ Since OSShepherd does not collect or store data on any server, there is no perso
 
 ## Contact
 
-If you have questions about this privacy policy, [open an issue](https://github.com/strawgate/chromerabbit/issues).
+For general questions about this privacy policy, [open an issue](https://github.com/strawgate/chromerabbit/issues).
+
+For sensitive security or privacy reports, email the maintainer directly (see the GitHub profile for contact info). Please do not file security issues publicly.
 
 ## Disclaimer
 

@@ -29,6 +29,8 @@ if (!fs.existsSync(path.join(EXTENSION_PATH, 'manifest.json'))) {
     args: [
       `--disable-extensions-except=${EXTENSION_PATH}`,
       `--load-extension=${EXTENSION_PATH}`,
+      '--no-first-run',
+      '--no-default-browser-check',
     ],
   });
 

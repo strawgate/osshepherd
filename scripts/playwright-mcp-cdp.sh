@@ -29,4 +29,4 @@ if [ -z "$WS_URL" ] || [ "$WS_URL" = "null" ]; then
   exit 1
 fi
 
-exec npx @playwright/mcp@latest --cdp-endpoint "$WS_URL" "$@"
+exec npx @playwright/mcp@0.0.68 --cdp-endpoint "$WS_URL" "$@"

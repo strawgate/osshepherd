@@ -193,7 +193,7 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
   display: inline-flex; align-items: center; gap: 4px;
   transition: opacity 0.15s;
 }
-.cr-filter-chip.dimmed { opacity: 0.3; }
+.cr-filter-chip.dimmed { opacity: 0.45; }
 .cr-filter-chip:hover { opacity: 1; }
 .cr-group-toggle {
   background: none; border: 1px solid #30363d; border-radius: 6px;

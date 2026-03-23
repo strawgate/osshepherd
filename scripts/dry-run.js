@@ -49,6 +49,15 @@ async function screenshot(page, name) {
   const extensionId = new URL(sw.url()).hostname;
   console.log(`Extension loaded! ID: ${extensionId}\n`);
 
+  // Graceful shutdown on Ctrl+C
+  const shutdown = async () => {
+    console.log('\nShutting down...');
+    await context.close().catch(() => {});
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
   const page = context.pages()[0] || await context.newPage();
 
   console.log('Step 1: Options page');
