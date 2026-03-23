@@ -320,6 +320,7 @@ let keepaliveInterval = null;
 
 function startKeepalive() {
   if (keepalivePort) return;
+  if (!location.href.includes('/pull/')) return; // re-check — may have navigated during reconnect delay
   try {
     keepalivePort = chrome.runtime.connect({ name: 'content:keepalive' });
     keepalivePort.onDisconnect.addListener(() => {
