@@ -37,6 +37,9 @@ function severityRank(sev) {
   return { critical: 0, high: 1, major: 1, medium: 2, minor: 2, low: 3, trivial: 4 }[sev] ?? 5;
 }
 
+const EFFORT_ORDER = ['high', 'medium', 'low', 'trivial'];
+const SEV_ORDER = ['critical', 'high', 'major', 'medium', 'minor', 'low', 'trivial', 'none'];
+
 async function sha256Hex(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -140,6 +143,16 @@ function navigateToFileLine(pr, filename, startLine) {
 // Small components
 // ---------------------------------------------------------------------------
 
+function EmptyState({ icon, title, description }) {
+  return html`
+    <div class="cr-empty-state">
+      <div class="cr-empty-icon">${icon}</div>
+      <div class="cr-empty-title">${title}</div>
+      ${description && html`<div class="cr-empty-desc">${description}</div>`}
+    </div>
+  `;
+}
+
 function Markdown({ text }) {
   if (!text) return null;
   return html`<div class="cr-md" dangerouslySetInnerHTML=${{ __html: CRMarkdown.render(text) }} />`;
@@ -171,7 +184,7 @@ function CopyButton({ text, label = '📋 Copy', copiedLabel = '✓ Copied', tit
 
 const STAGES = ['setup', 'summarizing', 'reviewing', 'complete'];
 const STAGE_LABELS = { setup: 'Setup', summarizing: 'Summarize', reviewing: 'Review', complete: 'Done' };
-const STAGE_TABS = { setup: 'setup', summarizing: 'files', reviewing: 'feedback', complete: 'files' };
+const STAGE_TABS = { setup: 'setup', summarizing: 'files', reviewing: 'feedback', complete: 'feedback' };
 
 function Toolbar({ review, onRerun }) {
   const { onSwitchTab } = useContext(SidebarContext);
@@ -187,7 +200,9 @@ function Toolbar({ review, onRerun }) {
   const [stale, setStale] = useState(false);
 
   useEffect(() => {
-    if (review.status !== 'complete' || !review.completedAt) return;
+    // Reset stale when a new review starts
+    if (review.status !== 'complete') { setStale(false); return; }
+    if (!review.completedAt) return;
     let cancelled = false;
     (async () => {
       try {
@@ -209,18 +224,20 @@ function Toolbar({ review, onRerun }) {
 
   return html`
     <div class="cr-toolbar visible">
-      <div class="cr-toolbar-row tracker-row">
-        ${STAGES.map((s, idx) => html`
-          ${idx > 0 && html`<div class="cr-tracker-line ${idx <= currentIdx ? 'done' : ''}" />`}
-          <div
-            class="cr-tracker-step ${idx < currentIdx ? 'done' : idx === currentIdx ? (isDone ? 'done' : 'active') : ''}"
-            onClick=${() => (idx <= currentIdx) && onSwitchTab(STAGE_TABS[s])}
-          >
-            <div class="cr-tracker-dot">✓</div>
-            <span>${STAGE_LABELS[s]}</span>
-          </div>
-        `)}
-      </div>
+      ${!isDone && html`
+        <div class="cr-toolbar-row tracker-row">
+          ${STAGES.map((s, idx) => html`
+            ${idx > 0 && html`<div class="cr-tracker-line ${idx <= currentIdx ? 'done' : ''}" />`}
+            <div
+              class="cr-tracker-step ${idx < currentIdx ? 'done' : idx === currentIdx ? 'active' : ''}"
+              onClick=${() => (idx <= currentIdx) && onSwitchTab(STAGE_TABS[s])}
+            >
+              <div class="cr-tracker-dot">✓</div>
+              <span>${STAGE_LABELS[s]}</span>
+            </div>
+          `)}
+        </div>
+      `}
       <div class="cr-toolbar-row info-row">
         <span class="cr-review-age">
           ${isDone ? `Reviewed ${age}` : 'In progress…'}
@@ -236,48 +253,7 @@ function Toolbar({ review, onRerun }) {
 // Summary panel
 // ---------------------------------------------------------------------------
 
-function HeroStat({ review, meta }) {
-  const { onSwitchTab } = useContext(SidebarContext);
-  const actionable = useMemo(
-    () => (review.comments || []).filter(c => c.severity !== 'none'),
-    [review.comments]
-  );
-  const sevCounts = useMemo(() => {
-    const counts = {};
-    for (const c of actionable) { const s = c.severity || 'medium'; counts[s] = (counts[s] || 0) + 1; }
-    return counts;
-  }, [actionable]);
-
-  const isZero = actionable.length === 0;
-
-  const onClick = useCallback(() => {
-    if (actionable.length > 0) onSwitchTab('feedback');
-  }, [actionable.length, onSwitchTab]);
-
-  return html`
-    <div class="cr-hero-row">
-      <div class="cr-hero cr-hero-clickable" onClick=${onClick}>
-        <span class="cr-hero-number ${isZero ? 'zero' : ''}">${actionable.length}</span>
-        <div>
-          <div class="cr-hero-label">
-            ${isZero ? 'All Clear' : `Actionable Finding${actionable.length !== 1 ? 's' : ''}`}
-            ${actionable.length > 0 && ' →'}
-          </div>
-          ${Object.keys(sevCounts).length > 0 && html`
-            <div class="cr-hero-breakdown">
-              ${Object.entries(sevCounts)
-                .sort((a, b) => severityRank(a[0]) - severityRank(b[0]))
-                .map(([sev, n]) => html`<span class="cr-sev-dot cr-sev-dot-${sev}">${n} ${sev}</span>`)}
-            </div>
-          `}
-        </div>
-      </div>
-      ${meta?.agentPrompt && html`
-        <${CopyButton} text=${meta.agentPrompt} label="🤖" copiedLabel="✓" title="Copy AI prompt to fix these issues" class="cr-copy-prompt-btn" />
-      `}
-    </div>
-  `;
-}
+// HeroStat removed — severity chips in the Feedback filter bar serve the same purpose.
 
 function FileSummaryCard({ filename, summary, isStreaming }) {
   const { onNavigate } = useContext(SidebarContext);
@@ -299,58 +275,99 @@ function FileSummaryCard({ filename, summary, isStreaming }) {
   `;
 }
 
-function FileSummariesSection({ fileEntries, isStreaming, elapsed }) {
+function FileSummariesSection({ fileEntries, isStreaming }) {
+
+  // Parse effort for each file
+  const filesWithEffort = useMemo(() =>
+    fileEntries.map(([fn, s]) => [fn, s, parseEffort(s) || 'unknown']),
+    [fileEntries]
+  );
+
+  // Effort counts
   const effortCounts = useMemo(() => {
     const counts = {};
-    for (const [, summary] of fileEntries) {
-      const e = parseEffort(summary);
-      if (e) counts[e] = (counts[e] || 0) + 1;
-    }
+    for (const [,, e] of filesWithEffort) counts[e] = (counts[e] || 0) + 1;
     return counts;
-  }, [fileEntries]);
-  const hasEffort = Object.keys(effortCounts).length > 0;
-  const effortOrder = ['high', 'medium', 'low', 'trivial'];
+  }, [filesWithEffort]);
+
+  // Filter state — low and trivial hidden by default (like feedback hides trivial+LGTM)
+  const [hiddenEfforts, setHiddenEfforts] = useState(new Set(['low', 'trivial']));
+  const toggleEffort = useCallback((e) => {
+    setHiddenEfforts(prev => {
+      const next = new Set(prev);
+      if (next.has(e)) next.delete(e); else next.add(e);
+      return next;
+    });
+  }, []);
+
+  // Group by mode
+  const [groupBy, setGroupBy] = useState('effort'); // 'effort' | 'flat'
+
+  const filtered = useMemo(
+    () => filesWithEffort.filter(([,, e]) => !hiddenEfforts.has(e)),
+    [filesWithEffort, hiddenEfforts]
+  );
+
+  // Grouped by effort level
+  const byEffort = useMemo(() => {
+    const groups = new Map();
+    for (const [fn, s, e] of filtered) {
+      if (!groups.has(e)) groups.set(e, []);
+      groups.get(e).push([fn, s]);
+    }
+    const order = [...EFFORT_ORDER, 'unknown'];
+    return order.filter(e => groups.has(e)).map(e => [e, groups.get(e)]);
+  }, [filtered]);
+
+  const hasEffort = Object.keys(effortCounts).length > 1 || !effortCounts.unknown;
+  const allEfforts = [...EFFORT_ORDER, 'unknown'];
 
   return html`
-    <div class="cr-timeline-divider">
-      <span class="cr-timeline-line" />
-      <span class="cr-timeline-label">
-        ${isStreaming
-          ? html`<span class="cr-emoji">📝</span> File Summaries${elapsed !== null ? ` · ${elapsed}s` : ''}`
-          : html`<span class="cr-emoji">📝</span> ${fileEntries.length} File${fileEntries.length !== 1 ? 's' : ''} Analyzed`}
-      </span>
-      <span class="cr-timeline-line" />
-    </div>
-    ${hasEffort && !isStreaming && html`
-      <div class="cr-effort-bar">
-        <span class="cr-effort-label">Review Effort</span>
-        ${effortOrder.filter(e => effortCounts[e]).map(e => html`
-          <span class="cr-effort-badge cr-effort-${e}">${effortCounts[e]} ${e}</span>
+    ${hasEffort && html`
+      <div class="cr-filter-bar">
+        ${allEfforts.filter(e => effortCounts[e]).map(e => html`
+          <button key=${e}
+            class="cr-filter-chip cr-effort-chip-${e} ${hiddenEfforts.has(e) ? 'dimmed' : ''}"
+            onClick=${() => toggleEffort(e)}>
+            ${effortCounts[e]} ${e === 'unknown' ? 'other' : e}
+          </button>
         `)}
+        <span class="cr-tab-spacer" />
+        <button class="cr-group-toggle" onClick=${() => setGroupBy(groupBy === 'effort' ? 'flat' : 'effort')}
+          title=${groupBy === 'effort' ? 'Show flat list' : 'Group by effort'}>
+          ${groupBy === 'effort' ? '☰ flat' : '⊞ by effort'}
+        </button>
       </div>
     `}
-    ${fileEntries.map(([fn, s]) => html`
+    ${filtered.length === 0 && html`<div class="cr-empty">All files filtered out. Click a badge above to show.</div>`}
+    ${groupBy === 'effort' && hasEffort ? byEffort.map(([effort, files]) => html`
+      <div class="cr-effort-group" key=${effort}>
+        <div class="cr-effort-group-header">
+          <span class="cr-effort-badge cr-effort-${effort}">${effort === 'unknown' ? 'other' : effort} effort</span>
+          <span>${files.length} file${files.length !== 1 ? 's' : ''}</span>
+        </div>
+        ${files.map(([fn, s]) => html`
+          <${FileSummaryCard} key=${fn} filename=${fn} summary=${s} isStreaming=${isStreaming} />
+        `)}
+      </div>
+    `) : filtered.map(([fn, s]) => html`
       <${FileSummaryCard} key=${fn} filename=${fn} summary=${s} isStreaming=${isStreaming} />
     `)}
   `;
 }
 
-/** Above-tabs overview: PR title + actionable findings hero. */
+/** Above-tabs overview: just the PR title. */
 function ReviewOverview({ review }) {
-  const meta = useMemo(() => review.summary ? parseSummaryMeta(review.summary) : null, [review.summary]);
-  if (!review.prTitle && !meta) return null;
+  if (!review.prTitle) return null;
   return html`
     <div class="cr-overview">
-      ${review.prTitle && html`
-        <div class="cr-pr-title-row">
-          <p class="cr-pr-title">
-            <span class="cr-pr-title-label">Suggested Title</span>
-            ${review.prTitle}
-          </p>
-          <${CopyButton} text=${review.prTitle} label="📋" copiedLabel="✓" title="Copy suggested title" />
-        </div>
-      `}
-      ${meta && html`<${HeroStat} review=${review} meta=${meta} />`}
+      <div class="cr-pr-title-row">
+        <p class="cr-pr-title">
+          <span class="cr-pr-title-label">Suggested Title</span>
+          ${review.prTitle}
+        </p>
+        <${CopyButton} text=${review.prTitle} label="📋" copiedLabel="✓" title="Copy suggested title" />
+      </div>
     </div>
   `;
 }
@@ -369,7 +386,7 @@ function FileSummariesPanel({ review }) {
     : null;
 
   if (!fileEntries.length && !review.summary) {
-    return html`<div class="cr-empty">Waiting for file summaries…</div>`;
+    return html`<${EmptyState} icon="📝" title="Analyzing files…" description="Summaries will appear as CodeRabbit processes each file." />`;
   }
 
   return html`
@@ -397,10 +414,9 @@ function CommentCard({ comment: c }) {
     if (c.filename) onNavigate(c.filename, c.startLine);
   }, [c.filename, c.startLine, onNavigate]);
 
-  const lineLabel = c.startLine
-    ? (c.endLine && c.endLine !== c.startLine
-      ? `Go to lines ${c.startLine}–${c.endLine}`
-      : `Go to line ${c.startLine}`)
+  const basename = c.filename ? c.filename.split('/').pop() : null;
+  const lineStr = c.startLine
+    ? (c.endLine && c.endLine !== c.startLine ? `:${c.startLine}–${c.endLine}` : `:${c.startLine}`)
     : '';
 
   return html`
@@ -408,9 +424,14 @@ function CommentCard({ comment: c }) {
       <div class="cr-comment-header">
         <div class="cr-comment-meta">
           <${SeverityBadge} severity=${c.severity} />
-          ${lineLabel && html`<span class="cr-line-link" onClick=${goToLine}>${lineLabel} →</span>`}
+          ${basename && html`<span class="cr-comment-file" onClick=${goToLine} title=${c.filename}>${basename}${lineStr} →</span>`}
         </div>
-        <${CopyButton} text=${rawText} label="📋" copiedLabel="✓" title="Copy comment" />
+        <div class="cr-comment-actions-inline">
+          ${c.codegenInstructions && html`
+            <${CopyButton} text=${c.codegenInstructions} label="🤖" copiedLabel="✓" title="Copy AI fix prompt for this issue" />
+          `}
+          <${CopyButton} text=${rawText} label="📋" copiedLabel="✓" title="Copy comment" />
+        </div>
       </div>
       <div class="cr-comment-text">
         <${Markdown} text=${rawText} />
@@ -419,59 +440,94 @@ function CommentCard({ comment: c }) {
   `;
 }
 
-function CommentsPanel({ review }) {
+function CommentsPanel({ review, agentPrompt }) {
   const { onNavigate } = useContext(SidebarContext);
   const comments = review.comments || [];
-  const actionable = useMemo(
-    () => comments.filter(c => c.severity !== 'none').sort((a, b) => severityRank(a.severity) - severityRank(b.severity)),
-    [comments]
-  );
-  const lgtm = useMemo(() => comments.filter(c => c.severity === 'none'), [comments]);
 
-  // Severity counts for badge bar
+  // Filter state — trivial and LGTM hidden by default
+  const [hiddenSevs, setHiddenSevs] = useState(new Set(['trivial', 'none']));
+  const toggleSev = useCallback((sev) => {
+    setHiddenSevs(prev => {
+      const next = new Set(prev);
+      if (next.has(sev)) next.delete(sev); else next.add(sev);
+      return next;
+    });
+  }, []);
+
+  // Group by mode
+  const [groupBy, setGroupBy] = useState('severity'); // 'severity' | 'file'
+
+  const filtered = useMemo(
+    () => comments.filter(c => !hiddenSevs.has(c.severity || 'none')),
+    [comments, hiddenSevs]
+  );
+
+  // Severity counts (all, not filtered)
   const sevCounts = useMemo(() => {
     const counts = {};
-    for (const c of actionable) { const s = c.severity || 'medium'; counts[s] = (counts[s] || 0) + 1; }
+    for (const c of comments) { const s = c.severity || 'none'; counts[s] = (counts[s] || 0) + 1; }
     return counts;
-  }, [actionable]);
+  }, [comments]);
 
-  // Group by file, sorted by highest severity
-  const fileGroups = useMemo(() => {
-    const byFile = new Map();
-    for (const c of actionable) {
-      if (!byFile.has(c.filename)) byFile.set(c.filename, []);
-      byFile.get(c.filename).push(c);
+  // Grouped views
+  const bySeverity = useMemo(() => {
+    const groups = new Map();
+    for (const c of filtered) {
+      const s = c.severity || 'none';
+      if (!groups.has(s)) groups.set(s, []);
+      groups.get(s).push(c);
     }
-    return [...byFile.entries()].sort((a, b) => severityRank(a[1][0].severity) - severityRank(b[1][0].severity));
-  }, [actionable]);
+    return SEV_ORDER.filter(s => groups.has(s)).map(s => [s, groups.get(s)]);
+  }, [filtered]);
 
-  if (!comments.length) return html`<div class="cr-empty">No comments yet.</div>`;
+  const byFile = useMemo(() => {
+    const groups = new Map();
+    for (const c of filtered) {
+      const f = c.filename || 'unknown';
+      if (!groups.has(f)) groups.set(f, []);
+      groups.get(f).push(c);
+    }
+    return [...groups.entries()].sort((a, b) =>
+      severityRank((a[1][0] || {}).severity) - severityRank((b[1][0] || {}).severity)
+    );
+  }, [filtered]);
+
+  if (!comments.length) return html`<${EmptyState} icon="💬" title="No feedback yet" description="Comments will appear as the review progresses." />`;
 
   return html`
-    ${(Object.keys(sevCounts).length > 0 || lgtm.length > 0) && html`
-      <div class="cr-sev-bar">
-        ${Object.entries(sevCounts)
-          .sort((a, b) => severityRank(a[0]) - severityRank(b[0]))
-          .map(([sev, n]) => html`<span class="cr-sev-badge cr-sev-badge-${sev}">${n} ${sev}</span>`)}
-        ${lgtm.length > 0 && html`<span class="cr-sev-badge cr-sev-badge-lgtm">${lgtm.length} LGTM</span>`}
+    <div class="cr-filter-bar">
+      ${SEV_ORDER.filter(s => sevCounts[s]).map(sev => html`
+        <button key=${sev}
+          class="cr-filter-chip cr-sev-badge-${sev === 'none' ? 'lgtm' : sev} ${hiddenSevs.has(sev) ? 'dimmed' : ''}"
+          onClick=${() => toggleSev(sev)}>
+          ${sevCounts[sev]} ${sev === 'none' ? 'LGTM' : sev}
+        </button>
+      `)}
+      <span class="cr-tab-spacer" />
+      <button class="cr-group-toggle" onClick=${() => setGroupBy(groupBy === 'severity' ? 'file' : 'severity')}
+        title=${groupBy === 'severity' ? 'Group by file' : 'Group by severity'}>
+        ${groupBy === 'severity' ? '⊞ by file' : '⊟ by severity'}
+      </button>
+    </div>
+    ${filtered.length === 0 && html`<div class="cr-empty">All comments filtered out. Click a badge above to show.</div>`}
+    ${groupBy === 'severity' ? bySeverity.map(([sev, items]) => html`
+      <div class="cr-sev-group" key=${sev}>
+        ${items.map((c, i) => html`<${CommentCard} key=${c.fingerprint || i} comment=${c} />`)}
       </div>
-    `}
-    ${fileGroups.map(([file, fileComments]) => html`
+    `) : byFile.map(([file, items]) => html`
       <div class="cr-file-group" key=${file}>
         <div class="cr-file-group-header cr-clickable-file" onClick=${() => onNavigate(file, '')}>
           <span>${file}</span>
-          <span>${fileComments.length} finding${fileComments.length !== 1 ? 's' : ''}</span>
+          <span>${items.length} finding${items.length !== 1 ? 's' : ''}</span>
         </div>
-        ${fileComments.map((c, i) => html`<${CommentCard} key=${c.fingerprint || i} comment=${c} />`)}
+        ${items.map((c, i) => html`<${CommentCard} key=${c.fingerprint || i} comment=${c} />`)}
       </div>
     `)}
-    ${lgtm.length > 0 && html`
-      <div class="cr-timeline-divider" style="margin-top:16px">
-        <span class="cr-timeline-line" />
-        <span class="cr-timeline-label"><span class="cr-emoji">✅</span> ${lgtm.length} LGTM</span>
-        <span class="cr-timeline-line" />
+    ${agentPrompt && filtered.length > 0 && html`
+      <div class="cr-fix-all-cta">
+        <${CopyButton} text=${agentPrompt} label="🤖 Copy prompt to fix all findings" copiedLabel="✓ Copied to clipboard!" title="Copy AI prompt to fix all issues" class="cr-fix-all-btn" />
+        <div class="cr-fix-all-hint">Paste this into Claude, Copilot, or your AI editor</div>
       </div>
-      ${lgtm.map((c, i) => html`<${CommentCard} key=${c.fingerprint || 'lgtm-' + i} comment=${c} />`)}
     `}
   `;
 }
@@ -482,7 +538,7 @@ function CommentsPanel({ review }) {
 
 function RawPanel({ review }) {
   const events = review.rawEvents || [];
-  if (!events.length) return html`<div class="cr-empty">No events yet.</div>`;
+  if (!events.length) return html`<${EmptyState} icon="📡" title="No events yet" description="Raw streaming events will appear here." />`;
   return html`${events.map((e, i) => html`
     <div class="cr-raw-event" key=${i}>
       <span class="cr-raw-event-type">[${e.type}]</span>
@@ -498,35 +554,43 @@ function RawPanel({ review }) {
 function SetupPanel({ review }) {
   const { onNavigate } = useContext(SidebarContext);
   const meta = useMemo(() => review.summary ? parseSummaryMeta(review.summary) : null, [review.summary]);
-  if (!meta) return html`<div class="cr-empty">No review info yet.</div>`;
+  if (!meta) return html`<${EmptyState} icon="⚙️" title="No config data yet" description="Review profile, plan, and file list will appear after the review completes." />`;
 
   return html`
-    ${meta.profile && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Review Profile</div>
-        <div class="cr-setup-value">${meta.profile}</div>
-      </div>
-    `}
-    ${meta.plan && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Plan</div>
-        <div class="cr-setup-value">${meta.plan}</div>
-      </div>
-    `}
-    ${meta.config && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Configuration</div>
-        <div class="cr-setup-value">${meta.config}</div>
-      </div>
-    `}
-    ${meta.commits && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Commits</div>
-        <div class="cr-setup-value">${meta.commits}</div>
-      </div>
-    `}
+    <div class="cr-setup-grid">
+      ${meta.profile && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Review Profile</div>
+          <div class="cr-setup-value">${meta.profile}</div>
+        </div>
+      `}
+      ${meta.plan && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Plan</div>
+          <div class="cr-setup-value">${meta.plan}</div>
+        </div>
+      `}
+      ${meta.config && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Configuration</div>
+          <div class="cr-setup-value">${meta.config}</div>
+        </div>
+      `}
+      ${meta.commits && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Commits</div>
+          <div class="cr-setup-value">${meta.commits}</div>
+        </div>
+      `}
+      ${meta.runId && html`
+        <div class="cr-setup-card">
+          <div class="cr-setup-label">Run ID</div>
+          <div class="cr-setup-value" style="font-family:monospace;font-size:11px;color:#8b949e">${meta.runId}</div>
+        </div>
+      `}
+    </div>
     ${meta.files?.length > 0 && html`
-      <div class="cr-setup-card">
+      <div class="cr-setup-card cr-setup-full">
         <div class="cr-setup-label">Files Reviewed (${meta.files.length})</div>
         <div class="cr-setup-files">
           ${meta.files.map(f => html`
@@ -535,14 +599,8 @@ function SetupPanel({ review }) {
         </div>
       </div>
     `}
-    ${meta.runId && html`
-      <div class="cr-setup-card">
-        <div class="cr-setup-label">Run ID</div>
-        <div class="cr-setup-value" style="font-family:monospace;font-size:11px;color:#8b949e">${meta.runId}</div>
-      </div>
-    `}
     ${meta.agentPrompt && html`
-      <div class="cr-setup-card">
+      <div class="cr-setup-card cr-setup-full">
         <div class="cr-setup-label">AI Agent Prompt</div>
         <pre class="cr-setup-prompt">${meta.agentPrompt}</pre>
       </div>
@@ -561,7 +619,7 @@ function SetupPanel({ review }) {
  */
 function Sidebar({ initialTab, onClose, onRerun }) {
   const review = reviewSignal.value;
-  const [activeTab, setActiveTab] = useState(initialTab || 'files');
+  const [activeTab, setActiveTab] = useState(initialTab || 'feedback');
   const pr = useMemo(
     () => review ? { owner: review.owner, repo: review.repo, prNumber: review.prNumber } : null,
     [review?.owner, review?.repo, review?.prNumber]
@@ -569,6 +627,14 @@ function Sidebar({ initialTab, onClose, onRerun }) {
   const actionableCount = useMemo(
     () => (review?.comments || []).filter(c => c.severity !== 'none').length,
     [review?.comments]
+  );
+  const agentPrompt = useMemo(() => {
+    const meta = review?.summary ? parseSummaryMeta(review.summary) : null;
+    return meta?.agentPrompt || null;
+  }, [review?.summary]);
+  const fileCount = useMemo(
+    () => Object.keys(review?.fileSummaries || {}).length,
+    [review?.fileSummaries]
   );
 
   const onNavigate = useCallback((filename, line) => {
@@ -580,7 +646,7 @@ function Sidebar({ initialTab, onClose, onRerun }) {
   const ctx = useMemo(() => ({ onNavigate, onSwitchTab: switchTab, pr }), [onNavigate, switchTab, pr]);
 
   if (!review) {
-    return html`<div class="cr-empty">Waiting for review…</div>`;
+    return html`<${EmptyState} icon="🐑" title="Waiting for review…" description="Click the OSShepherd button on any GitHub PR to start." />`;
   }
 
   return html`
@@ -598,10 +664,10 @@ function Sidebar({ initialTab, onClose, onRerun }) {
       <${Toolbar} review=${review} onRerun=${onRerun} />
       <${ReviewOverview} review=${review} />
       <div class="cr-tabs">
-        ${['files', 'feedback', 'setup'].map(tab => html`
+        ${['feedback', 'files', 'setup'].map(tab => html`
           <button key=${tab} class="cr-tab ${activeTab === tab ? 'active' : ''}" onClick=${() => switchTab(tab)}>
             ${tab === 'feedback' ? html`Feedback <span class="cr-tab-badge">${actionableCount}</span>` :
-              tab === 'files' ? 'File Summaries' : 'Setup'}
+              tab === 'files' ? html`Files ${fileCount > 0 ? html`<span class="cr-tab-badge">${fileCount}</span>` : ''}` : 'Config'}
           </button>
         `)}
         <span class="cr-tab-spacer" />
@@ -612,7 +678,7 @@ function Sidebar({ initialTab, onClose, onRerun }) {
           <${ErrorBoundary} label="File Summaries"><${FileSummariesPanel} review=${review} /><//>
         </div>
         <div class="cr-panel ${activeTab === 'feedback' ? 'active' : ''}">
-          <${ErrorBoundary} label="Feedback"><${CommentsPanel} review=${review} /><//>
+          <${ErrorBoundary} label="Feedback"><${CommentsPanel} review=${review} agentPrompt=${agentPrompt} /><//>
         </div>
         <div class="cr-panel ${activeTab === 'raw' ? 'active' : ''}">
           <${ErrorBoundary} label="Raw"><${RawPanel} review=${review} /><//>

@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const ReviewStore = require('../../utils/review-store');
+const ReviewStore = require('../../src/utils/review-store');
 
 // ---------------------------------------------------------------------------
 // Fake chrome.storage.local backend (Map-backed, synchronous callbacks)

@@ -19,7 +19,7 @@ require('../helpers/chrome-mock');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-const ROOT = path.resolve(__dirname, '../..');
+const ROOT = path.resolve(__dirname, '../../src');
 
 function readScript(relPath) {
   return fs.readFileSync(path.join(ROOT, relPath), 'utf8');

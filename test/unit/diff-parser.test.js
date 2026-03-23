@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseDiff } = require('../../utils/diff-parser');
+const { parseDiff } = require('../../src/utils/diff-parser');
 
 const SIMPLE_DIFF = `diff --git a/foo.go b/foo.go
 index abc..def 100644

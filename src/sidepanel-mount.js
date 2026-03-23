@@ -103,7 +103,15 @@ function mountApp(review, _prContext) {
     reviewSignal.value = ReviewStore.createRecord(r.owner, r.repo, r.prNumber, 'pending');
     chrome.runtime.sendMessage(
       { type: 'REQUEST_REVIEW', payload: { owner: r.owner, repo: r.repo, prNumber: r.prNumber } },
-      () => {}
+      (response) => {
+        if (chrome.runtime.lastError || !response?.success) {
+          const msg = chrome.runtime.lastError?.message || response?.error || 'Background not responding';
+          LOG('Re-run failed:', msg);
+          const errReview = ReviewStore.createRecord(r.owner, r.repo, r.prNumber, 'error');
+          errReview.status = 'error';
+          reviewSignal.value = errReview;
+        }
+      }
     );
   };
 
@@ -111,7 +119,7 @@ function mountApp(review, _prContext) {
   globalThis.navigateToFileLine = (pr, filename, line) => navigateTab(pr, filename, line);
 
   render(
-    html`<${Sidebar} initialTab="files" onClose=${onClose} onRerun=${onRerun} />`,
+    html`<${Sidebar} initialTab="feedback" onClose=${onClose} onRerun=${onRerun} />`,
     mountTarget
   );
 }

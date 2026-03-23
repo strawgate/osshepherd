@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const md = require('../../utils/markdown');
+const md = require('../../src/utils/markdown');
 
 describe('CRMarkdown.render', () => {
   describe('inline formatting', () => {
