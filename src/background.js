@@ -42,48 +42,54 @@ function scheduleStuckCheck(cacheKey, tabId) {
 
     // Check if we've received any events at all
     const eventCount = (record.rawEvents || []).length;
-    if (!receivedFirstEvent && eventCount > 0) receivedFirstEvent = true;
+    if (!receivedFirstEvent && eventCount > 0) {
+      receivedFirstEvent = true;
+      // Sync lastEventTime so the stuck-timeout calculation has a valid baseline
+      if (!lastEventTime.has(cacheKey)) lastEventTime.set(cacheKey, Date.now());
+    }
 
     // Fast timeout: no events within 15s → connection/auth likely failed
     if (!receivedFirstEvent && (Date.now() - startTime) >= FIRST_EVENT_TIMEOUT_MS) {
       clearInterval(intervalId);
       ERR(`[${cacheKey}] No events received within ${FIRST_EVENT_TIMEOUT_MS / 1000}s — marking as error.`);
       const errRecord = Object.assign({}, record, { status: 'error' });
-      ReviewStore.save(errRecord).then(() => {
-        activeRecords.delete(cacheKey);
-        lastEventTime.delete(cacheKey);
+      // Clean up maps regardless of save success
+      activeRecords.delete(cacheKey);
+      lastEventTime.delete(cacheKey);
+      ReviewStore.save(errRecord).catch(err => ERR(`[${cacheKey}] Failed to save error record:`, err)).finally(() => {
         sendToTab(tabId, {
           type: 'REVIEW_RESULT',
           payload: { status: 'error', message: 'Review failed to start — no response from CodeRabbit. Check your connection and try again.' }
         });
-      }).catch(err => ERR(`[${cacheKey}] Failed to save error record:`, err));
+      });
       return;
     }
 
     // Slow timeout: no events for 3 minutes after first → review is stuck
-    const lastTime = lastEventTime.get(cacheKey) || 0;
+    const lastTime = lastEventTime.get(cacheKey);
+    if (!lastTime || !receivedFirstEvent) return; // no baseline yet — skip
     const elapsed = Date.now() - lastTime;
-    if (receivedFirstEvent && elapsed >= STUCK_TIMEOUT_MS) {
+    if (elapsed >= STUCK_TIMEOUT_MS) {
       clearInterval(intervalId);
       const mins = Math.round(elapsed / 60000);
       ERR(`[${cacheKey}] Review appears stuck — no events for ${mins} min. Marking as error.`);
       const errRecord = Object.assign({}, record, { status: 'error' });
-      ReviewStore.save(errRecord).then(() => {
-        activeRecords.delete(cacheKey);
-        lastEventTime.delete(cacheKey);
+      activeRecords.delete(cacheKey);
+      lastEventTime.delete(cacheKey);
+      ReviewStore.save(errRecord).catch(err => ERR(`[${cacheKey}] Failed to save stuck record:`, err)).finally(() => {
         sendToTab(tabId, {
           type: 'REVIEW_RESULT',
           payload: { status: 'error', message: `Review timed out — no response for ${mins} minutes. Try re-running the review.` }
         });
-      }).catch(err => ERR(`[${cacheKey}] Failed to save stuck record:`, err));
+      });
     }
   }, 5_000); // check every 5s (was 30s — faster detection for the 15s first-event timeout)
 }
 
-// Accept keepalive ports from offscreen documents.
+// Accept keepalive ports from content scripts and offscreen documents.
 // The port's existence keeps this SW alive; we don't need to respond.
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name.startsWith('review:')) {
+  if (port.name.startsWith('content:') || port.name.startsWith('review:')) {
     LOG(`Keepalive port opened: ${port.name}`);
     port.onDisconnect.addListener(() => {
       LOG(`Keepalive port closed: ${port.name}`);

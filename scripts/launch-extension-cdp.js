@@ -29,11 +29,16 @@ if (!fs.existsSync(path.join(EXTENSION_PATH, 'manifest.json'))) {
     args: [
       `--disable-extensions-except=${EXTENSION_PATH}`,
       `--load-extension=${EXTENSION_PATH}`,
+      '--no-first-run',
+      '--no-default-browser-check',
     ],
   });
 
-  // Graceful shutdown on Ctrl+C
+  // Graceful shutdown on Ctrl+C (idempotent — safe to call multiple times)
+  let shuttingDown = false;
   const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log('\nShutting down...');
     await context.close().catch(() => {});
     process.exit(0);

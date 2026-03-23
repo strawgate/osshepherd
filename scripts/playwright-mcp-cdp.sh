@@ -15,7 +15,7 @@ CDP_JSON=$(curl -sf --connect-timeout 3 "http://127.0.0.1:${PORT}/json/version" 
 }
 
 # Parse the WebSocket URL
-WS_URL=$(echo "$CDP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['webSocketDebuggerUrl'])" 2>&1) || {
+WS_URL=$(echo "$CDP_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['webSocketDebuggerUrl'])" 2>/dev/null) || {
   # Fallback to jq
   WS_URL=$(echo "$CDP_JSON" | jq -r '.webSocketDebuggerUrl' 2>/dev/null) || {
     echo "Failed to parse webSocketDebuggerUrl from CDP response." >&2
@@ -29,4 +29,4 @@ if [ -z "$WS_URL" ] || [ "$WS_URL" = "null" ]; then
   exit 1
 fi
 
-exec npx @playwright/mcp@latest --cdp-endpoint "$WS_URL" "$@"
+exec npx @playwright/mcp@0.0.68 --cdp-endpoint "$WS_URL" "$@"

@@ -34,13 +34,18 @@ function getPRFromURL() {
 // ---------------------------------------------------------------------------
 
 function openSidePanel(pr) {
-  chrome.runtime.sendMessage({ type: 'OPEN_SIDEPANEL', payload: pr }, (response) => {
-    if (chrome.runtime.lastError) {
-      LOG('sidePanel.open message failed:', chrome.runtime.lastError.message);
-    } else if (!response?.success) {
-      LOG('sidePanel.open failed:', response?.error);
-    }
-  });
+  try {
+    chrome.runtime.sendMessage({ type: 'OPEN_SIDEPANEL', payload: pr }, (response) => {
+      if (chrome.runtime.lastError) {
+        LOG('sidePanel.open message failed:', chrome.runtime.lastError.message);
+      } else if (!response?.success) {
+        LOG('sidePanel.open failed:', response?.error);
+      }
+    });
+  } catch {
+    // Extension context invalidated — page needs refresh
+    showCrToast('Extension updated', 'Please refresh the page to reconnect.', 'error');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -138,21 +143,34 @@ async function handleReviewClick() {
     return;
   }
 
-  // Ping background — retry a few times since the SW may need to wake up
+  // Ping background — retry a few times since the SW may need to wake up.
+  // If the extension context is invalidated (e.g. after update/long sleep),
+  // sendMessage throws synchronously — catch that and prompt a reload.
   let isAwake = false;
   for (let attempt = 0; attempt < 3; attempt++) {
-    isAwake = await new Promise(resolve => {
-      chrome.runtime.sendMessage({ type: 'PING' }, response => {
-        resolve(!chrome.runtime.lastError && response?.success);
+    try {
+      isAwake = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ type: 'PING' }, response => {
+          if (chrome.runtime.lastError) {
+            resolve(false);
+          } else {
+            resolve(response?.success === true);
+          }
+        });
       });
-    });
+    } catch (e) {
+      // "Extension context invalidated" — can't recover without page reload
+      ERR('Extension context invalidated:', e.message);
+      showCrToast('Extension updated', 'Please refresh the page to reconnect.', 'error');
+      return;
+    }
     if (isAwake) break;
     LOG(`PING attempt ${attempt + 1} failed, retrying…`);
     await new Promise(r => setTimeout(r, 500));
   }
   if (!isAwake) {
     ERR('Background SW did not respond after 3 attempts');
-    showCrToast('Extension not responding', 'Try refreshing the page. If that doesn\'t work, disable and re-enable the extension.', 'error');
+    showCrToast('Extension not responding', 'Please refresh the page to reconnect.', 'error');
     return;
   }
 
@@ -271,9 +289,11 @@ const observer = new MutationObserver(() => {
         // Same PR, different tab — just ensure FAB is still there
         ensureFAB();
       }
+      startKeepalive();
     } else {
       const existingBtn = document.querySelector(`.${BTN_CLASS}`);
       if (existingBtn) existingBtn.remove();
+      stopKeepalive();
     }
     return;
   }
@@ -291,6 +311,45 @@ const observer = new MutationObserver(() => {
 observer.observe(document.documentElement, { childList: true, subtree: true });
 
 // ---------------------------------------------------------------------------
+// Service Worker keepalive — prevents the SW from sleeping while a PR tab is open.
+// Chrome kills ports after 5 minutes, so we reconnect before that.
+// ---------------------------------------------------------------------------
+
+let keepalivePort = null;
+let keepaliveInterval = null;
+
+function startKeepalive() {
+  if (keepalivePort) return;
+  if (!location.href.includes('/pull/')) return; // re-check — may have navigated during reconnect delay
+  try {
+    keepalivePort = chrome.runtime.connect({ name: 'content:keepalive' });
+    keepalivePort.onDisconnect.addListener(() => {
+      keepalivePort = null;
+      // Reconnect if we're still on a PR page (port dies after 5 min or SW restart)
+      if (location.href.includes('/pull/')) {
+        setTimeout(() => {
+          try { startKeepalive(); } catch { /* extension context gone */ }
+        }, 1000);
+      }
+    });
+    if (!keepaliveInterval) {
+      keepaliveInterval = setInterval(() => {
+        try { keepalivePort?.postMessage({ type: 'keepalive' }); }
+        catch { /* port dead, onDisconnect will reconnect */ }
+      }, 25_000);
+    }
+  } catch {
+    // Extension context invalidated — can't reconnect
+    keepalivePort = null;
+  }
+}
+
+function stopKeepalive() {
+  if (keepaliveInterval) { clearInterval(keepaliveInterval); keepaliveInterval = null; }
+  if (keepalivePort) { try { keepalivePort.disconnect(); } catch { /* ok */ } keepalivePort = null; }
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 
@@ -299,12 +358,15 @@ document.addEventListener('turbo:load', () => {
   lastUrl = location.href;
   if (location.href.includes('/pull/')) {
     ensureFAB();
+    startKeepalive();
   } else {
     const btn = document.querySelector(`.${BTN_CLASS}`);
     if (btn) btn.remove();
+    stopKeepalive();
   }
 });
 
 if (location.href.includes('/pull/')) {
   injectCodeRabbitButton();
+  startKeepalive();
 }

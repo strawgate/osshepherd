@@ -10,7 +10,7 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "activeTab", "scripting", "tabs", "declarativeNetRequest", "offscreen", "sidePanel"],
+  "permissions": ["storage", "activeTab", "tabs", "declarativeNetRequest", "offscreen", "sidePanel"],
   "host_permissions": [
     "https://github.com/*",
     "https://*.githubusercontent.com/*",

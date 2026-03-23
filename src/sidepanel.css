@@ -193,14 +193,16 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
   display: inline-flex; align-items: center; gap: 4px;
   transition: opacity 0.15s;
 }
-.cr-filter-chip.dimmed { opacity: 0.3; }
+.cr-filter-chip.dimmed { opacity: 0.45; }
 .cr-filter-chip:hover { opacity: 1; }
+.cr-filter-chip:focus-visible { outline: 2px solid var(--cr-blue); outline-offset: 1px; opacity: 1; }
 .cr-group-toggle {
   background: none; border: 1px solid #30363d; border-radius: 6px;
   color: var(--cr-text-secondary); font-size: 10px; padding: 2px 8px; cursor: pointer;
   white-space: nowrap; transition: all 0.15s;
 }
 .cr-group-toggle:hover { border-color: var(--cr-blue); color: var(--cr-blue); }
+.cr-group-toggle:focus-visible { outline: 2px solid var(--cr-blue); outline-offset: 1px; }
 
 /* Severity group header */
 .cr-sev-group { margin-bottom: 14px; }
@@ -238,7 +240,7 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
   display: flex; gap: 2px; flex-shrink: 0;
 }
 .cr-comment-actions-inline .cr-action-btn {
-  opacity: 0.4; font-size: 12px; padding: 2px 5px;
+  opacity: 0.5; font-size: 12px; padding: 2px 5px;
   border: none; background: none;
 }
 .cr-comment-actions-inline .cr-action-btn:hover { opacity: 1; border: none; background: none; }
@@ -388,6 +390,7 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
   transition: all 0.15s;
 }
 .cr-fix-all-btn:hover { background: #238636; color: #fff; }
+.cr-fix-all-btn:focus-visible { outline: 2px solid var(--cr-green); outline-offset: 2px; }
 .cr-fix-all-btn.copied { background: #238636; color: #fff; }
 .cr-fix-all-hint {
   font-size: 11px; color: var(--cr-text-muted); margin-top: 8px;
@@ -405,8 +408,8 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
 .cr-effort-chip-high { background: #2d1f3d; color: #d2a8ff; }
 .cr-effort-chip-medium { background: #1f2a3d; color: var(--cr-blue); }
 .cr-effort-chip-low { background: var(--cr-border-subtle); color: var(--cr-text-secondary); }
-.cr-effort-chip-trivial { background: var(--cr-border-subtle); color: var(--cr-text-muted); }
-.cr-effort-chip-unknown { background: var(--cr-border-subtle); color: var(--cr-text-muted); }
+.cr-effort-chip-trivial { background: var(--cr-border-subtle); color: var(--cr-text-secondary); }
+.cr-effort-chip-unknown { background: var(--cr-border-subtle); color: var(--cr-text-secondary); }
 .cr-effort-badge {
   font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 8px;
   white-space: nowrap; text-transform: capitalize;
@@ -414,7 +417,7 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
 .cr-effort-high { background: #2d1f3d; color: #d2a8ff; }
 .cr-effort-medium { background: #1f2a3d; color: var(--cr-blue); }
 .cr-effort-low { background: var(--cr-border-subtle); color: var(--cr-text-secondary); }
-.cr-effort-trivial { background: var(--cr-border-subtle); color: var(--cr-text-muted); }
+.cr-effort-trivial { background: var(--cr-border-subtle); color: var(--cr-text-secondary); }
 
 /* ── Light mode ─────────────────────────────────────────────────── */
 @media (prefers-color-scheme: light) {
