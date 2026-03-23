@@ -36,6 +36,7 @@ function scheduleStuckCheck(cacheKey, tabId) {
     const record = activeRecords.get(cacheKey);
     if (!record || record.status === 'complete' || record.status === 'error') {
       clearInterval(intervalId);
+      lastEventTime.delete(cacheKey);
       return;
     }
 
