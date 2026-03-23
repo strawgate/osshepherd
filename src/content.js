@@ -289,9 +289,11 @@ const observer = new MutationObserver(() => {
         // Same PR, different tab — just ensure FAB is still there
         ensureFAB();
       }
+      startKeepalive();
     } else {
       const existingBtn = document.querySelector(`.${BTN_CLASS}`);
       if (existingBtn) existingBtn.remove();
+      stopKeepalive();
     }
     return;
   }
@@ -309,6 +311,44 @@ const observer = new MutationObserver(() => {
 observer.observe(document.documentElement, { childList: true, subtree: true });
 
 // ---------------------------------------------------------------------------
+// Service Worker keepalive — prevents the SW from sleeping while a PR tab is open.
+// Chrome kills ports after 5 minutes, so we reconnect before that.
+// ---------------------------------------------------------------------------
+
+let keepalivePort = null;
+let keepaliveInterval = null;
+
+function startKeepalive() {
+  if (keepalivePort) return;
+  try {
+    keepalivePort = chrome.runtime.connect({ name: 'content:keepalive' });
+    keepalivePort.onDisconnect.addListener(() => {
+      keepalivePort = null;
+      // Reconnect if we're still on a PR page (port dies after 5 min or SW restart)
+      if (location.href.includes('/pull/')) {
+        setTimeout(() => {
+          try { startKeepalive(); } catch { /* extension context gone */ }
+        }, 1000);
+      }
+    });
+    if (!keepaliveInterval) {
+      keepaliveInterval = setInterval(() => {
+        try { keepalivePort?.postMessage({ type: 'keepalive' }); }
+        catch { /* port dead, onDisconnect will reconnect */ }
+      }, 25_000);
+    }
+  } catch {
+    // Extension context invalidated — can't reconnect
+    keepalivePort = null;
+  }
+}
+
+function stopKeepalive() {
+  if (keepaliveInterval) { clearInterval(keepaliveInterval); keepaliveInterval = null; }
+  if (keepalivePort) { try { keepalivePort.disconnect(); } catch { /* ok */ } keepalivePort = null; }
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 
@@ -317,12 +357,15 @@ document.addEventListener('turbo:load', () => {
   lastUrl = location.href;
   if (location.href.includes('/pull/')) {
     ensureFAB();
+    startKeepalive();
   } else {
     const btn = document.querySelector(`.${BTN_CLASS}`);
     if (btn) btn.remove();
+    stopKeepalive();
   }
 });
 
 if (location.href.includes('/pull/')) {
   injectCodeRabbitButton();
+  startKeepalive();
 }

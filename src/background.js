@@ -86,10 +86,10 @@ function scheduleStuckCheck(cacheKey, tabId) {
   }, 5_000); // check every 5s (was 30s — faster detection for the 15s first-event timeout)
 }
 
-// Accept keepalive ports from offscreen documents.
+// Accept keepalive ports from content scripts and offscreen documents.
 // The port's existence keeps this SW alive; we don't need to respond.
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name.startsWith('review:')) {
+  if (port.name.startsWith('content:') || port.name.startsWith('review:')) {
     LOG(`Keepalive port opened: ${port.name}`);
     port.onDisconnect.addListener(() => {
       LOG(`Keepalive port closed: ${port.name}`);
