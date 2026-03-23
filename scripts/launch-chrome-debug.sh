@@ -16,9 +16,10 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHROME_PID=""
 
 # Find Playwright's bundled Chromium
-CHROMIUM="$(find "$HOME/Library/Caches/ms-playwright" -name "Google Chrome for Testing" -path "*/MacOS/*" 2>/dev/null | head -1)"
+# Pick the newest Playwright Chromium install (sorted by modification time)
+CHROMIUM="$(find "$HOME/Library/Caches/ms-playwright" -name "Google Chrome for Testing" -path "*/MacOS/*" -print0 2>/dev/null | xargs -0 ls -1t 2>/dev/null | head -1)"
 if [ -z "$CHROMIUM" ]; then
-  CHROMIUM="$(find "$HOME/.cache/ms-playwright" -name "chrome" -path "*/chrome-linux/*" 2>/dev/null | head -1)"
+  CHROMIUM="$(find "$HOME/.cache/ms-playwright" -name "chrome" -path "*/chrome-linux/*" -print0 2>/dev/null | xargs -0 ls -1t 2>/dev/null | head -1)"
 fi
 if [ -z "$CHROMIUM" ]; then
   echo "Playwright Chromium not found. Run: npx playwright install chromium" >&2

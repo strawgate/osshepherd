@@ -60,14 +60,14 @@ async function screenshot(page, name) {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForLoadState('domcontentloaded');
   await page.locator('.header-title').waitFor({ timeout: 3000 })
-    .catch(err => console.debug('Popup header wait timed out:', err.message));
+    .catch(err => console.warn('Popup header wait timed out:', err.message));
   await screenshot(page, '02-popup');
 
   console.log('\nStep 3: PR page');
   await page.goto(PR_URL, { waitUntil: 'domcontentloaded' });
   const fab = page.locator('.coderabbit-fab');
   await fab.waitFor({ state: 'visible', timeout: 5000 })
-    .catch(err => console.debug('FAB wait timed out:', err.message));
+    .catch(err => console.warn('FAB wait timed out:', err.message));
   await screenshot(page, '03-pr-page');
 
   const fabVisible = await fab.isVisible().catch(() => false);

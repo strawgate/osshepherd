@@ -11,9 +11,15 @@
 const { chromium } = require('@playwright/test');
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
 
 const EXTENSION_PATH = path.resolve(__dirname, '../src');
 const USER_DATA_DIR = path.join(os.tmpdir(), 'osshepherd-debug-profile');
+
+if (!fs.existsSync(path.join(EXTENSION_PATH, 'manifest.json'))) {
+  console.error(`Error: Extension not found at ${EXTENSION_PATH}`);
+  process.exit(1);
+}
 
 (async () => {
   console.log('Launching Chromium with extension from src/...');
@@ -25,6 +31,15 @@ const USER_DATA_DIR = path.join(os.tmpdir(), 'osshepherd-debug-profile');
       `--load-extension=${EXTENSION_PATH}`,
     ],
   });
+
+  // Graceful shutdown on Ctrl+C
+  const shutdown = async () => {
+    console.log('\nShutting down...');
+    await context.close().catch(() => {});
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 
   let sw = context.serviceWorkers()[0];
   if (!sw) {

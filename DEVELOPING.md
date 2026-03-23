@@ -84,13 +84,15 @@ make zip          # Package for Chrome Web Store (builds from src/)
 
 ## Debug Browser
 
-Launch Playwright's Chromium with the extension loaded + CDP for Playwright MCP:
+Two scripts for launching a browser with the extension loaded for manual testing:
+
+**`launch-chrome-debug.sh`** — Launches Playwright's Chromium with a CDP (Chrome DevTools Protocol) endpoint exposed. Writes `.mcp.json` so Playwright MCP can connect for Claude Code integration. Use this when you want Claude Code to interact with the browser.
 
 ```bash
 ./scripts/launch-chrome-debug.sh
 ```
 
-Or use `launchPersistentContext` directly:
+**`launch-extension-cdp.js`** — Uses Playwright's `launchPersistentContext()` API to launch Chromium with the extension. Simpler, no CDP exposure. Use this for quick manual testing.
 
 ```bash
 node scripts/launch-extension-cdp.js
