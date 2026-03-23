@@ -21,6 +21,28 @@
 
 ---
 
+## How it works
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <strong>1. Click the button</strong><br><br>
+      <img src="assets/Review Button.png" alt="Review button on a GitHub PR" width="280"><br>
+      <em>A floating button appears on every GitHub PR page.</em>
+    </td>
+    <td align="center" width="33%">
+      <strong>2. Review in progress</strong><br><br>
+      <img src="assets/In-Progress.png" alt="Review in progress with progress tracker" width="280"><br>
+      <em>Watch the review stream in real time.</em>
+    </td>
+    <td align="center" width="33%">
+      <strong>3. Triage findings</strong><br><br>
+      <img src="assets/Review-Sidebar.png" alt="Completed review with findings" width="280"><br>
+      <em>Filter by severity, click to navigate, copy AI fix prompts.</em>
+    </td>
+  </tr>
+</table>
+
 ## Features
 
 - **One-click review** — click the 🐑 button on any GitHub PR to trigger a CodeRabbit AI review
