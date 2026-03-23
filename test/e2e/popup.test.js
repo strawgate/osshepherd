@@ -3,7 +3,7 @@ const { test, expect } = require('./fixtures');
 test('renders the header', async ({ context, extensionId }) => {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(page.locator('.header-title')).toContainText('OSShepherd Reviews');
+  await expect(page.locator('.header-title')).toContainText('OSShepherd for CodeRabbit Reviews');
 });
 
 test('shows settings button', async ({ context, extensionId }) => {
