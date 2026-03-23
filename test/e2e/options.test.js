@@ -3,7 +3,7 @@ const { test, expect } = require('./fixtures');
 test('renders without errors', async ({ context, extensionId }) => {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/options.html`);
-  await expect(page.locator('h1')).toContainText('OSShepherd Settings');
+  await expect(page.locator('h1')).toContainText('OSShepherd for CodeRabbit Settings');
 });
 
 test('shows login button when signed out', async ({ context, extensionId }) => {
