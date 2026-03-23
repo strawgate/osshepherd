@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/icons/logo.png" alt="OSShepherd" width="160">
+  <img src="src/icons/logo.png" alt="OSShepherd logo — AI code review companion for GitHub PRs" width="160">
 </p>
 
 <h1 align="center">OSShepherd for CodeRabbit™</h1>
@@ -59,8 +59,8 @@ make zip          # produces osshepherd.zip (~92KB)
 ## Development
 
 ```bash
-npm test          # unit tests (Node.js test runner, 103 tests)
-npm run test:e2e  # Playwright E2E tests (11 tests)
+npm test          # unit tests (Node.js test runner)
+npm run test:e2e  # Playwright E2E tests
 npm run lint      # ESLint
 npm run lint:md   # markdownlint
 ```

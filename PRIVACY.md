@@ -4,7 +4,7 @@
 
 ## Summary
 
-OSShepherd does not collect, store, or transmit any personal data. The extension runs entirely in your browser.
+OSShepherd does not operate servers that collect or store your data. All data handling occurs locally in your browser or is transmitted directly to third-party services you authorize (CodeRabbit and GitHub).
 
 ## Data handling
 

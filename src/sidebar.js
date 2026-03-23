@@ -37,6 +37,9 @@ function severityRank(sev) {
   return { critical: 0, high: 1, major: 1, medium: 2, minor: 2, low: 3, trivial: 4 }[sev] ?? 5;
 }
 
+const EFFORT_ORDER = ['high', 'medium', 'low', 'trivial'];
+const SEV_ORDER = ['critical', 'high', 'major', 'medium', 'minor', 'low', 'trivial', 'none'];
+
 async function sha256Hex(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -273,7 +276,6 @@ function FileSummaryCard({ filename, summary, isStreaming }) {
 }
 
 function FileSummariesSection({ fileEntries, isStreaming }) {
-  const effortOrder = ['high', 'medium', 'low', 'trivial'];
 
   // Parse effort for each file
   const filesWithEffort = useMemo(() =>
@@ -313,12 +315,12 @@ function FileSummariesSection({ fileEntries, isStreaming }) {
       if (!groups.has(e)) groups.set(e, []);
       groups.get(e).push([fn, s]);
     }
-    const order = [...effortOrder, 'unknown'];
+    const order = [...EFFORT_ORDER, 'unknown'];
     return order.filter(e => groups.has(e)).map(e => [e, groups.get(e)]);
   }, [filtered]);
 
   const hasEffort = Object.keys(effortCounts).length > 1 || !effortCounts.unknown;
-  const allEfforts = [...effortOrder, 'unknown'];
+  const allEfforts = [...EFFORT_ORDER, 'unknown'];
 
   return html`
     ${hasEffort && html`
@@ -466,7 +468,6 @@ function CommentsPanel({ review, agentPrompt }) {
     for (const c of comments) { const s = c.severity || 'none'; counts[s] = (counts[s] || 0) + 1; }
     return counts;
   }, [comments]);
-  const sevOrder = ['critical', 'high', 'major', 'medium', 'minor', 'low', 'trivial', 'none'];
 
   // Grouped views
   const bySeverity = useMemo(() => {
@@ -476,7 +477,7 @@ function CommentsPanel({ review, agentPrompt }) {
       if (!groups.has(s)) groups.set(s, []);
       groups.get(s).push(c);
     }
-    return sevOrder.filter(s => groups.has(s)).map(s => [s, groups.get(s)]);
+    return SEV_ORDER.filter(s => groups.has(s)).map(s => [s, groups.get(s)]);
   }, [filtered]);
 
   const byFile = useMemo(() => {
@@ -495,7 +496,7 @@ function CommentsPanel({ review, agentPrompt }) {
 
   return html`
     <div class="cr-filter-bar">
-      ${sevOrder.filter(s => sevCounts[s]).map(sev => html`
+      ${SEV_ORDER.filter(s => sevCounts[s]).map(sev => html`
         <button key=${sev}
           class="cr-filter-chip cr-sev-badge-${sev === 'none' ? 'lgtm' : sev} ${hiddenSevs.has(sev) ? 'dimmed' : ''}"
           onClick=${() => toggleSev(sev)}>

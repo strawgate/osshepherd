@@ -15,6 +15,13 @@ const EXTENSION_PATH = path.resolve(__dirname, '../src');
 const SCREENSHOTS_DIR = path.join(__dirname, '..', 'screenshots');
 const PR_URL = process.argv[2] || 'https://github.com/strawgate/chromerabbit/pull/2';
 
+// Preflight: ensure extension source exists
+if (!fs.existsSync(path.join(EXTENSION_PATH, 'manifest.json'))) {
+  console.error(`Error: Extension not found at ${EXTENSION_PATH}`);
+  console.error('Expected src/manifest.json — are you running from the project root?');
+  process.exit(1);
+}
+
 async function screenshot(page, name) {
   const filepath = path.join(SCREENSHOTS_DIR, `${name}.png`);
   await page.screenshot({ path: filepath, fullPage: false });
@@ -52,20 +59,22 @@ async function screenshot(page, name) {
   console.log('\nStep 2: Popup');
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForLoadState('domcontentloaded');
-  await page.locator('.header-title').waitFor({ timeout: 3000 }).catch(() => {});
+  await page.locator('.header-title').waitFor({ timeout: 3000 })
+    .catch(err => console.debug('Popup header wait timed out:', err.message));
   await screenshot(page, '02-popup');
 
   console.log('\nStep 3: PR page');
   await page.goto(PR_URL, { waitUntil: 'domcontentloaded' });
   const fab = page.locator('.coderabbit-fab');
-  await fab.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  await fab.waitFor({ state: 'visible', timeout: 5000 })
+    .catch(err => console.debug('FAB wait timed out:', err.message));
   await screenshot(page, '03-pr-page');
 
   const fabVisible = await fab.isVisible().catch(() => false);
   console.log(`  FAB visible: ${fabVisible ? '✅' : '❌'}`);
 
   console.log('\nScreenshots saved to screenshots/');
-  // Keep browser open for manual inspection
+  // Keep browser open indefinitely for manual inspection
   console.log('Browser open for inspection. Ctrl+C to close.');
   await new Promise(() => {});
 })().catch(e => { console.error(e); process.exit(1); });

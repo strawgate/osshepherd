@@ -32,7 +32,7 @@ scripts/                     Dev tooling (browser launch, dry-run)
 
 ### Content Script (`src/content.js`)
 
-Lightweight (~290 lines). Injects the FAB button on GitHub PR pages and communicates with the background service worker. Does NOT render the sidebar — that's the sidePanel's job. Listens for GitHub's `turbo:load` event to survive SPA navigations.
+Lightweight content script. Injects the FAB button on GitHub PR pages and communicates with the background service worker. Does NOT render the sidebar — that's the sidePanel's job. Listens for GitHub's `turbo:load` event to survive SPA navigations.
 
 ### Chrome SidePanel (`src/sidepanel.html`)
 
@@ -70,7 +70,7 @@ npm install
 
 1. Load the extension: `chrome://extensions` → Developer mode → Load unpacked → select `src/`
 2. Sign in: extension icon → Settings → Sign in with CodeRabbit™
-3. Navigate to any GitHub PR → click the 🐑 button
+3. Navigate to any GitHub PR → click the 🐑 button to start a CodeRabbit™ review
 
 ## Commands
 
