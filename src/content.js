@@ -53,7 +53,7 @@ function openSidePanel(pr) {
 // ---------------------------------------------------------------------------
 
 const FAB_STATES = {
-  idle:       { text: '🐑 Review with OSShepherd', disabled: false, cls: '' },
+  idle:       { text: '🐑 Start Review', disabled: false, cls: '' },
   loading:    { text: '⏳ Reviewing…',               disabled: false, cls: 'coderabbit-loading' },
   complete:   (n) => ({ text: `✅ View Review (${n})`, disabled: false, cls: 'coderabbit-complete' }),
   lgtm:       { text: '✅ LGTM — View Review',       disabled: false, cls: 'coderabbit-complete' },
