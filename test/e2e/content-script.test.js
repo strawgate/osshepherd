@@ -28,7 +28,7 @@ test('injects the CodeRabbit FAB on a GitHub PR page', async ({ context }) => {
 
   const fab = page.locator('.coderabbit-fab');
   await expect(fab).toBeVisible({ timeout: 5000 });
-  await expect(fab).toContainText('Review with OSShepherd');
+  await expect(fab).toContainText('Start Review');
 });
 
 test('does NOT inject on non-PR GitHub pages', async ({ context }) => {
