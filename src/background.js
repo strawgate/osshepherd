@@ -566,30 +566,42 @@ async function handleRequestReview(payload, ghTabId) {
     }
   }
 
-  // Inject auth headers for the WebSocket upgrade via declarativeNetRequest
-  const requestHeaders = [
+  // Inject auth headers for the WebSocket upgrade via declarativeNetRequest.
+  // Chrome supports arbitrary custom headers; Safari only allows standard headers.
+  // We try with all headers first, then fall back to essentials-only for Safari.
+  const organizationId = storageItem.organizationId;
+  const essentialHeaders = [
     { header: "Authorization", operation: "set", value: token },
+    { header: "Origin", operation: "remove" }
+  ];
+  const fullHeaders = [
+    ...essentialHeaders,
     { header: "X-CodeRabbit-Extension", operation: "set", value: "vscode" },
     { header: "X-CodeRabbit-Extension-Version", operation: "set", value: chrome.runtime.getManifest().version },
     { header: "X-CodeRabbit-Extension-ClientId", operation: "set", value: generateUUID() },
-    { header: "Origin", operation: "remove" }
   ];
-  const organizationId = storageItem.organizationId;
   if (organizationId) {
-    requestHeaders.push({ header: "x-coderabbitai-organization", operation: "set", value: organizationId });
+    essentialHeaders.push({ header: "x-coderabbitai-organization", operation: "set", value: organizationId });
+    fullHeaders.push({ header: "x-coderabbitai-organization", operation: "set", value: organizationId });
   }
-  await chrome.declarativeNetRequest.updateDynamicRules({
+
+  const dnrRule = (headers) => ({
     removeRuleIds: [DNR_DYNAMIC_RULE_ID],
     addRules: [{
       id: DNR_DYNAMIC_RULE_ID,
       priority: 2,
-      action: { type: "modifyHeaders", requestHeaders },
-      condition: {
-        urlFilter: "ide.coderabbit.ai",
-        resourceTypes: ["websocket"]
-      }
+      action: { type: "modifyHeaders", requestHeaders: headers },
+      condition: { urlFilter: "ide.coderabbit.ai", resourceTypes: ["websocket"] }
     }]
   });
+
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules(dnrRule(fullHeaders));
+  } catch (e) {
+    // Safari rejects custom headers — fall back to essentials only
+    LOG('Full DNR headers rejected (Safari?), falling back to essentials:', e.message);
+    await chrome.declarativeNetRequest.updateDynamicRules(dnrRule(essentialHeaders));
+  }
 
   // Fetch the PR diff
   const diffUrl = `https://patch-diff.githubusercontent.com/raw/${owner}/${repo}/pull/${prNumber}.diff`;
