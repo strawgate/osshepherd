@@ -175,10 +175,10 @@ describe('background.js — REVIEW_EVENT handler', () => {
   });
 
   it('rejects messages from content scripts (sender.tab present)', async () => {
-    const { triggerMessage } = buildBackgroundContext();
+    const { triggerMessage, EXTENSION_ID, EXTENSION_ORIGIN } = buildBackgroundContext();
     const responses = triggerMessage(
       { type: 'REVIEW_EVENT', owner: 'acme', repo: 'api', prNumber: '42', tabId: 9, event: {} },
-      { id: 'test-extension-id', url: 'chrome-extension://test-extension-id/offscreen.html', tab: { id: 9 } }
+      { id: EXTENSION_ID, url: `${EXTENSION_ORIGIN}/offscreen.html`, tab: { id: 9 } }
     );
     await tick();
     assert.equal(global.chrome.tabs.sendMessage.mock.calls.length, 0, 'content script sender should be rejected');

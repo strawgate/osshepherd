@@ -100,7 +100,13 @@ class CodeRabbitClient {
 
       // Batched messages — server can send an array of responses
       if (Array.isArray(parsed)) {
-        for (const msg of parsed) this._handleSingleMessage(msg);
+        for (let i = 0; i < parsed.length; i++) {
+          try {
+            this._handleSingleMessage(parsed[i]);
+          } catch (e) {
+            console.error(`[WS] Failed to handle batch item ${i} (id=${parsed[i]?.id}):`, e);
+          }
+        }
         return;
       }
 
@@ -115,11 +121,11 @@ class CodeRabbitClient {
     if (parsed.id !== undefined && this.subscriptions.has(parsed.id)) {
       const sub = this.subscriptions.get(parsed.id);
       if (parsed.error) {
-         sub.onError && sub.onError(parsed.error);
+        sub.onError?.(parsed.error);
       } else if (parsed.result && parsed.result.type === 'data') {
-        sub.onNext && sub.onNext(parsed.result.data);
+        sub.onNext?.(parsed.result.data);
       } else if (parsed.result && parsed.result.type === 'stopped') {
-        sub.onComplete && sub.onComplete();
+        sub.onComplete?.();
         this.subscriptions.delete(parsed.id);
       }
     }
@@ -129,12 +135,11 @@ class CodeRabbitClient {
 
       if (parsed.error) {
         reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
-        this.resolvers.delete(parsed.id);
       } else {
         const resData = parsed.result?.data || parsed.result;
         resolve(resData);
-        this.resolvers.delete(parsed.id);
       }
+      this.resolvers.delete(parsed.id);
     }
   }
 

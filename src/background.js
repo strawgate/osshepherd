@@ -32,8 +32,9 @@ async function getOrRehydrateRecord(cacheKey, owner, repo, prNumber) {
         activeRecords.set(cacheKey, record);
         lastEventTime.set(cacheKey, Date.now());
       }
-      rehydrating.delete(cacheKey);
       return record;
+    }).finally(() => {
+      rehydrating.delete(cacheKey);
     }));
   }
   return rehydrating.get(cacheKey);
@@ -594,7 +595,7 @@ async function handleRequestReview(payload, ghTabId) {
       id: DNR_DYNAMIC_RULE_ID,
       priority: 2,
       action: { type: "modifyHeaders", requestHeaders: headers },
-      condition: { urlFilter: "ide.coderabbit.ai", resourceTypes: ["websocket"] }
+      condition: { urlFilter: "||ide.coderabbit.ai/", resourceTypes: ["websocket"] }
     }]
   });
 
