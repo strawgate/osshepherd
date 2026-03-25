@@ -164,7 +164,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'START_OAUTH_LOGIN') {
-    if (sender.url !== chrome.runtime.getURL('options.html')) {
+    // sender.id (same extension) is the primary trust check; sender.url narrows to options page.
+    if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('options.html')) {
       ERR('START_OAUTH_LOGIN from unexpected sender:', sender.url);
       sendResponse({ success: false, error: 'Unauthorized' });
       return false;
@@ -197,7 +198,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       handleResult(handleRequestReview({ owner, repo, prNumber }, sender.tab.id));
     } else {
       // Side panel: look up the authoritative context from session storage
-      if (sender.url !== chrome.runtime.getURL('sidepanel.html')) {
+      // sender.id (same extension) is the primary trust check; sender.url narrows to sidepanel.
+      if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('sidepanel.html')) {
         ERR('REQUEST_REVIEW (non-tab) from unexpected sender:', sender.url);
         sendResponse({ success: false, error: 'Unauthorized' });
         return false;
@@ -216,7 +218,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Streaming event from offscreen — save to storage and forward to tab
   if (request.type === 'REVIEW_EVENT' || request.type === 'REVIEW_COMPLETE' || request.type === 'REVIEW_ERROR') {
-    if (sender.url !== chrome.runtime.getURL('offscreen.html')) {
+    // sender.id (same extension) is the primary trust check; sender.url narrows to offscreen doc.
+    if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('offscreen.html')) {
       ERR(`${request.type} from unexpected sender:`, sender.url);
       return false;
     }

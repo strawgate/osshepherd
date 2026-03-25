@@ -13,7 +13,7 @@ Chrome extensions have four distinct execution contexts, ranked from most to lea
 |------|---------|---------------|
 | 1 (highest) | Background service worker (`background.js`) | Owns all privileged operations; only context with full `chrome.*` API access |
 | 2 | Extension pages (`sidepanel.html`, `options.html`, `popup.html`) | Trusted — same origin, but no `sender.tab`; can only be opened by the browser or the background |
-| 3 | Offscreen document (`offscreen.html`) | Extension origin, but limited to `chrome.runtime`; exists only for WebSocket I/O |
+| 3 | Offscreen document (`offscreen.html`) | Extension origin; has access to `chrome.runtime` and to other `chrome.*` APIs granted by manifest permissions (actual breadth expands with Chrome version); used only for WebSocket I/O in this extension |
 | 4 (lowest) | Content scripts (`content.js`) | Run inside the web page's renderer process; the extension's biggest attack surface |
 
 Content scripts are treated as untrusted input because they share a process with arbitrary web
@@ -39,32 +39,43 @@ We ignore `request.payload` entirely for identifying the PR. Instead we parse
 forge this field. If the URL does not match the GitHub PR pattern we reject the request.
 
 **Side panel → background (`REQUEST_REVIEW`)**
-The side panel has no `sender.tab`. We use `sender.url` to confirm the message came from
-`sidepanel.html` (our extension page), then look up the PR identity from
-`chrome.storage.session` (written by the background at `OPEN_SIDEPANEL` time from a verified
-tab URL). The side panel payload only supplies a `tabId` as a lookup key; it cannot inject PR
-identity.
+The side panel has no `sender.tab`. We verify `sender.id === chrome.runtime.id` (same
+extension) as the primary trust check, then additionally require `sender.url` to match
+`sidepanel.html` to restrict the handler to that specific page. PR identity is then looked up
+from `chrome.storage.session` (written by the background at `OPEN_SIDEPANEL` time from a
+verified tab URL). The side panel payload only supplies a `tabId` as a lookup key; it cannot
+inject PR identity.
 
 **Options page → background (`START_OAUTH_LOGIN`)**
-Validated via `sender.url === chrome.runtime.getURL('options.html')`. Only the options page
-should be able to trigger an OAuth flow.
+`sender.id === chrome.runtime.id` is the primary check; `sender.url` must additionally match
+`options.html`. Only the options page should be able to trigger an OAuth flow.
 
 **Offscreen document → background (`REVIEW_EVENT`, `REVIEW_COMPLETE`, `REVIEW_ERROR`)**
-Validated via `sender.url === chrome.runtime.getURL('offscreen.html')`.
+`sender.id === chrome.runtime.id` is the primary check; `sender.url` must additionally match
+`offscreen.html`.
 
 **Background → offscreen (`START_OFFSCREEN_REVIEW`)**
-Validated inside `offscreen.js` via `sender.url === chrome.runtime.getURL('background.js')`.
-The offscreen document is a broadcast target too; without this check a compromised content
-script could trigger a spurious review WebSocket connection.
+Validated inside `offscreen.js` using `sender.id === chrome.runtime.id && !sender.tab`.
+We do **not** check `sender.url` here because Chrome does not reliably set `sender.url` for
+background service worker messages. `sender.tab` being present means the sender is a content
+script (always untrusted for this message type).
 
-### `sender.url` vs `sender.origin`
+### Sender field reliability: `sender.id`, `sender.origin`, and `sender.url`
 
-Chrome's `sender.url` includes the full URL of the sending extension page or service worker.
-Chrome's own security docs note that `sender.origin` (added Chrome 80) is preferable when
-checking for a compromised-renderer attack, because `sender.url` could theoretically be
-spoofed in that scenario. For this extension the relevant threats are confused-deputy attacks
-from content scripts and extension-page misuse — not compromised renderers — so `sender.url`
-is appropriate and consistent with the patterns Chrome's extension samples use.
+**`sender.id`** is the extension ID and is set for all extension contexts including content
+scripts. It is the primary trust anchor — a wrong `sender.id` means the message came from a
+different extension.
+
+**`sender.origin`** is `chrome-extension://<id>` for all extension contexts. Chrome's own
+docs list it as more resistant to spoofing in compromised-renderer scenarios than `sender.url`
+(added Chrome 80). It is equivalent to `sender.id` for our trust decisions since all extension
+pages share the same origin.
+
+**`sender.url`** is the full URL of the sending extension page. It is reliably set for
+extension pages (`popup.html`, `sidepanel.html`, `options.html`, `offscreen.html`) and is used
+as a secondary check to restrict specific message types to the correct page. It is **not**
+checked in isolation — `sender.id` must pass first. `sender.url` is **not** checked for
+service worker senders because Chrome may leave it unset for that context.
 
 ---
 
@@ -92,7 +103,8 @@ the token values.
 
 - `<div>` is **not** in the block-HTML pass-through allowlist, preventing arbitrary HTML injection via div wrappers.
 - All pass-through block HTML tags (`<details>`, `<summary>`, tables) are sanitised to strip `on*` event handlers and `style` attributes (quoted and unquoted).
-- Link URLs are validated against a scheme **allowlist** (`https?`, `mailto`, `tel`, `ftp`, relative paths) rather than a blocklist. Schemes not in the list produce an empty `href`.
+- URL-bearing attributes (`href`, `src`, `action`, `formaction`, `background`, `poster`, `cite`, `ping`) in pass-through HTML are validated against the same scheme allowlist; attributes with disallowed schemes are stripped entirely.
+- Link URLs are validated against a scheme **allowlist** (`https?`, `mailto`, `tel`, `ftp`, relative paths, `data:image/*`) rather than a blocklist. Schemes not in the list produce an empty `href`.
 
 ---
 
@@ -102,5 +114,5 @@ the token values.
 |------|-----------|
 | `chrome.storage.local` tokens readable by content scripts | No available mitigation within MV3; background never forwards raw tokens in messages |
 | `storage.session` `onChanged` leaks to content scripts (Chromium bug 1342046) | Session data contains only PR identity (owner/repo/number), not secrets |
-| `sender.url` forgeable under compromised-renderer attack | Threat model is confused-deputy, not compromised renderer; accepted |
+| `sender.url` forgeable under compromised-renderer attack | `sender.url` is a secondary check only; `sender.id` is the primary guard. Threat model is confused-deputy, not compromised renderer; accepted |
 | CodeRabbit API auth (token scoping, server-side validation) | Server-side; outside our control |

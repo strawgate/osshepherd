@@ -12,7 +12,18 @@
 
   const BLOCK_HTML_RE = /^<\/?(details|summary|table|thead|tbody|tr|th|td|blockquote)\b/i;
 
-  /** Strip event-handler and style attributes from a block-HTML line. */
+  const URL_ATTRS_RE = /href|src|action|formaction|background|poster|cite|ping/i;
+
+  /** Returns true if a URL is safe (https?, mailto, tel, ftp, relative, or data:image). */
+  function isSafeUrl(url) {
+    const t = url.trim();
+    return /^(https?|mailto|tel|ftp):/i.test(t) ||
+           /^[/?#.]/.test(t) ||
+           /^data:image\//i.test(t) ||
+           t === '';
+  }
+
+  /** Strip event-handler, style, and unsafe URL-bearing attributes from a block-HTML line. */
   function sanitizeBlockHtml(line) {
     return line
       .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
@@ -20,7 +31,11 @@
       .replace(/\s+on\w+\s*=\s*\S+/gi, '')
       .replace(/\s+style\s*=\s*"[^"]*"/gi, '')
       .replace(/\s+style\s*=\s*'[^']*'/gi, '')
-      .replace(/\s+style\s*=\s*\S+/gi, '');
+      .replace(/\s+style\s*=\s*\S+/gi, '')
+      .replace(/\s+(\w[\w-]*)\s*=\s*"([^"]*)"/gi, (match, attr, val) =>
+        URL_ATTRS_RE.test(attr) && !isSafeUrl(val) ? '' : match)
+      .replace(/\s+(\w[\w-]*)\s*=\s*'([^']*)'/gi, (match, attr, val) =>
+        URL_ATTRS_RE.test(attr) && !isSafeUrl(val) ? '' : match);
   }
 
   /** @param {string} str */

@@ -658,7 +658,9 @@ function Sidebar({ initialTab, onClose, onRerun }) {
             ${{ pending: 'Pending', reviewing: 'Reviewing…', complete: 'Complete', error: 'Error' }[review.status] || review.status}
           </span>
           <span class="cr-pr-slug cr-pr-slug-link"
-            onClick=${() => chrome.tabs.create({ url: `https://github.com/${review.owner}/${review.repo}/pull/${review.prNumber}` })}>
+            role="link" tabIndex="0"
+            onClick=${() => chrome.tabs.create({ url: `https://github.com/${review.owner}/${review.repo}/pull/${review.prNumber}` })}
+            onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chrome.tabs.create({ url: `https://github.com/${review.owner}/${review.repo}/pull/${review.prNumber}` }); } }}>
             ${review.owner}/${review.repo}#${review.prNumber}
           </span>
         </div>
