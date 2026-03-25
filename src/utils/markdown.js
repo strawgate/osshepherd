@@ -10,7 +10,37 @@
 (function () {
   'use strict';
 
-  const BLOCK_HTML_RE = /^<\/?(details|summary|div|table|thead|tbody|tr|th|td|blockquote)\b/i;
+  const BLOCK_HTML_RE = /^<\/?(details|summary|table|thead|tbody|tr|th|td|blockquote)\b/i;
+
+  const URL_ATTRS_RE = /href|src|action|formaction|background|poster|cite|ping/i;
+
+  // Explicit raster MIME types allowed in data: URLs. SVG is excluded because
+  // data:image/svg+xml can embed <script> and event-handler attributes.
+  const SAFE_DATA_IMAGE_RE = /^data:image\/(png|jpe?g|gif|webp);/i;
+
+  /** Returns true if a URL is safe (https?, mailto, tel, ftp, relative, or raster data:image). */
+  function isSafeUrl(url) {
+    const t = url.trim();
+    return /^(https?|mailto|tel|ftp):/i.test(t) ||
+           /^[/?#.]/.test(t) ||
+           SAFE_DATA_IMAGE_RE.test(t) ||
+           t === '';
+  }
+
+  /** Strip event-handler, style, and unsafe URL-bearing attributes from a block-HTML line. */
+  function sanitizeBlockHtml(line) {
+    return line
+      .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
+      .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
+      .replace(/\s+on\w+\s*=\s*\S+/gi, '')
+      .replace(/\s+style\s*=\s*"[^"]*"/gi, '')
+      .replace(/\s+style\s*=\s*'[^']*'/gi, '')
+      .replace(/\s+style\s*=\s*\S+/gi, '')
+      .replace(/\s+(\w[\w-]*)\s*=\s*"([^"]*)"/gi, (match, attr, val) =>
+        URL_ATTRS_RE.test(attr) && !isSafeUrl(val) ? '' : match)
+      .replace(/\s+(\w[\w-]*)\s*=\s*'([^']*)'/gi, (match, attr, val) =>
+        URL_ATTRS_RE.test(attr) && !isSafeUrl(val) ? '' : match);
+  }
 
   /** @param {string} str */
   function escapeHtml(str) {
@@ -48,10 +78,15 @@
     // 3. Italic *text* (not inside bold)
     result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
-    // 4. Links [text](url)
-    result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) =>
-      `<a href="${escapeAttr(url)}" target="_blank" rel="noopener">${text}</a>`
-    );
+    // 4. Links [text](url) — allowlist safe schemes; block data:, vbscript:, etc.
+    //    `text` is safe here: processInline is always called with escapeHtml()-pre-escaped input,
+    //    so user-supplied < > are entities. The only raw HTML in `text` at this step is
+    //    our own <strong>/<em>/<code> injections from steps 2-3 above (intentional, controlled).
+    result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+      const t = url.trim();
+      const safe = /^(https?|mailto|tel|ftp):/i.test(t) || /^[/?#.]/.test(t) || t === '';
+      return `<a href="${escapeAttr(safe ? url : '')}" target="_blank" rel="noopener">${text}</a>`;
+    });
 
     // 5. Restore code spans
     result = result.replace(/\x00C(\d+)\x00/g, (_, idx) => codeSpans[Number(idx)]);
@@ -119,7 +154,7 @@
 
       // --- Block-level HTML (details, summary, table, etc.) → pass through ---
       if (BLOCK_HTML_RE.test(trimmed)) {
-        out.push(line);
+        out.push(sanitizeBlockHtml(line));
         i++;
         continue;
       }

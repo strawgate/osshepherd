@@ -88,7 +88,7 @@ function showEmpty(message) {
     `<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#8b949e;font-family:-apple-system,sans-serif;font-size:13px;text-align:center;padding:20px">${message}</div>`;
 }
 
-function mountApp(review, _prContext) {
+function mountApp(review, ctx) {
   const mountTarget = document.getElementById('cr-app');
   mountTarget.innerHTML = '';
   mountTarget.className = 'cr-sidebar';
@@ -102,7 +102,7 @@ function mountApp(review, _prContext) {
     await ReviewStore.remove(r.owner, r.repo, r.prNumber);
     reviewSignal.value = ReviewStore.createRecord(r.owner, r.repo, r.prNumber, 'pending');
     chrome.runtime.sendMessage(
-      { type: 'REQUEST_REVIEW', payload: { owner: r.owner, repo: r.repo, prNumber: r.prNumber } },
+      { type: 'REQUEST_REVIEW', payload: { tabId: ctx.tabId } },
       (response) => {
         if (chrome.runtime.lastError || !response?.success) {
           const msg = chrome.runtime.lastError?.message || response?.error || 'Background not responding';

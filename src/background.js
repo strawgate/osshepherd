@@ -8,6 +8,8 @@ const ERR = (...args) => console.error('[CR:background]', ...args);
 // High-range ID avoids collisions with static rules (which use low IDs like 1)
 const DNR_DYNAMIC_RULE_ID = 1001;
 
+const GITHUB_PR_URL_REGEX = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/;
+
 // In-memory record cache keyed by "owner/repo/prNumber" for the active review session.
 // Avoids a storage read on every streaming event. The SW stays alive while events arrive.
 const activeRecords = new Map();
@@ -126,6 +128,15 @@ function updateBadge(tabId, review) {
   }
 }
 
+/**
+ * Returns true when a message sender is a specific extension page.
+ * sender.id is the primary trust check (same extension); sender.url narrows to the given page.
+ * Do not use for service-worker senders — Chrome may not set sender.url in that context.
+ */
+function isFromExtensionPage(sender, pagePath) {
+  return sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL(pagePath);
+}
+
 function sendToTab(tabId, message) {
   chrome.tabs.sendMessage(tabId, message, () => {
     if (chrome.runtime.lastError) {
@@ -148,7 +159,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'OPEN_SIDEPANEL') {
     const tabId = sender.tab?.id;
     if (!tabId) { sendResponse({ success: false, error: 'No tab' }); return false; }
-    const { owner, repo, prNumber } = request.payload || {};
+    // Parse PR identity from the tab URL — don't trust the payload
+    const m = sender.tab?.url?.match(GITHUB_PR_URL_REGEX);
+    if (!m) { sendResponse({ success: false, error: 'Not a GitHub PR tab' }); return false; }
+    const [, owner, repo, prNumber] = m;
     // Store context so sidePanel knows which PR to display
     chrome.storage.session.set({ [`sidepanel:context:${tabId}`]: { owner, repo, prNumber, tabId } });
     chrome.sidePanel.open({ tabId })
@@ -161,6 +175,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'START_OAUTH_LOGIN') {
+    if (!isFromExtensionPage(sender, 'options.html')) {
+      ERR('START_OAUTH_LOGIN from unexpected sender:', sender.url);
+      sendResponse({ success: false, error: 'Unauthorized' });
+      return false;
+    }
     handleOAuthLogin()
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
@@ -168,20 +187,52 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'REQUEST_REVIEW') {
-    LOG(`REQUEST_REVIEW from tab ${sender.tab?.id}: ${request.payload?.owner}/${request.payload?.repo}#${request.payload?.prNumber}`);
-    handleRequestReview(request.payload, sender.tab.id)
-      .then(res => {
-        LOG('handleRequestReview result:', JSON.stringify(res).substring(0, 80));
-        sendResponse({ success: true, data: res });
-      })
-      .catch(err => {
-        ERR('handleRequestReview threw:', err.message || err);
-        sendResponse({ success: false, error: err.message || String(err) });
+    const handleResult = (promise) => {
+      promise
+        .then(res => {
+          LOG('handleRequestReview result:', JSON.stringify(res).substring(0, 80));
+          sendResponse({ success: true, data: res });
+        })
+        .catch(err => {
+          ERR('handleRequestReview threw:', err.message || err);
+          sendResponse({ success: false, error: err.message || String(err) });
+        });
+    };
+
+    if (sender.tab?.url) {
+      // Content script: parse PR identity from the verified tab URL
+      const m = sender.tab.url.match(GITHUB_PR_URL_REGEX);
+      if (!m) { sendResponse({ success: false, error: 'Not a GitHub PR tab' }); return false; }
+      const [, owner, repo, prNumber] = m;
+      LOG(`REQUEST_REVIEW from tab ${sender.tab.id}: ${owner}/${repo}#${prNumber}`);
+      handleResult(handleRequestReview({ owner, repo, prNumber }, sender.tab.id));
+    } else {
+      // Side panel: look up the authoritative context from session storage
+      if (!isFromExtensionPage(sender, 'sidepanel.html')) {
+        ERR('REQUEST_REVIEW (non-tab) from unexpected sender:', sender.url);
+        sendResponse({ success: false, error: 'Unauthorized' });
+        return false;
+      }
+      const tabId = request.payload?.tabId;
+      if (!tabId) { sendResponse({ success: false, error: 'Missing tabId' }); return false; }
+      chrome.storage.session.get(`sidepanel:context:${tabId}`, (result) => {
+        const ctx = result[`sidepanel:context:${tabId}`];
+        if (!ctx) { sendResponse({ success: false, error: 'No session context for tab' }); return; }
+        LOG(`REQUEST_REVIEW from sidepanel for tab ${tabId}: ${ctx.owner}/${ctx.repo}#${ctx.prNumber}`);
+        handleResult(handleRequestReview({ owner: ctx.owner, repo: ctx.repo, prNumber: ctx.prNumber }, tabId));
       });
+    }
     return true;
   }
 
   // Streaming event from offscreen — save to storage and forward to tab
+  if (request.type === 'REVIEW_EVENT' || request.type === 'REVIEW_COMPLETE' || request.type === 'REVIEW_ERROR') {
+    if (!isFromExtensionPage(sender, 'offscreen.html')) {
+      ERR(`${request.type} from unexpected sender:`, sender.url);
+      return false;
+    }
+  }
+
   if (request.type === 'REVIEW_EVENT') {
     const { owner, repo, prNumber, tabId, event } = request;
     const cacheKey = `${owner}/${repo}/${prNumber}`;
@@ -247,7 +298,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // ============================================================
 // OAuth Login Flow
 // ============================================================
+let pendingOAuthTabId = null;
+
 async function handleOAuthLogin() {
+  if (pendingOAuthTabId !== null) {
+    throw new Error('A login is already in progress. Please complete or cancel it first.');
+  }
+  // Claim the slot synchronously so concurrent calls fail the guard above
+  // before chrome.tabs.create has a chance to return the real tab id.
+  pendingOAuthTabId = true;
+
   const state = generateUUID();
   // Open CodeRabbit login with client=vscode params — user clicks "Sign in with GitHub"
   // After GitHub OAuth, it redirects back to app.coderabbit.ai/login?code=XXX&state=github
@@ -255,12 +315,33 @@ async function handleOAuthLogin() {
 
   return new Promise((resolve, reject) => {
     chrome.tabs.create({ url: loginUrl }, (loginTab) => {
+      if (!loginTab) {
+        pendingOAuthTabId = null;
+        reject(new Error('Failed to open login tab'));
+        return;
+      }
       const tabId = loginTab.id;
-      const timeout = setTimeout(() => {
+      pendingOAuthTabId = tabId;
+
+      const cleanupOAuth = () => {
+        pendingOAuthTabId = null;
         chrome.tabs.onUpdated.removeListener(listener);
+        chrome.tabs.onRemoved.removeListener(onTabClosed);
+      };
+
+      const timeout = setTimeout(() => {
+        cleanupOAuth();
         chrome.tabs.remove(tabId).catch(() => {});
         reject(new Error('Login timed out after 5 minutes'));
       }, 5 * 60 * 1000);
+
+      const onTabClosed = (removedTabId) => {
+        if (removedTabId !== tabId) return;
+        clearTimeout(timeout);
+        cleanupOAuth();
+        reject(new Error('Login cancelled — the sign-in tab was closed.'));
+      };
+      chrome.tabs.onRemoved.addListener(onTabClosed);
 
       const listener = async (updatedTabId, changeInfo, tab) => {
         if (updatedTabId !== tabId) return;
@@ -293,7 +374,7 @@ async function handleOAuthLogin() {
 
         // Got a code! Immediately stop the tab from processing it
         clearTimeout(timeout);
-        chrome.tabs.onUpdated.removeListener(listener);
+        cleanupOAuth();
         // Stop the page from loading further (prevents CodeRabbit SPA from consuming the code)
         chrome.tabs.update(tabId, { url: 'about:blank' });
         setTimeout(() => chrome.tabs.remove(tabId).catch(() => {}), 500);

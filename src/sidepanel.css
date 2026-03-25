@@ -39,6 +39,9 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
   background: #161b22; flex-shrink: 0;
 }
 .cr-pr-slug { font-size: 12px; color: var(--cr-text-secondary); font-family: monospace; }
+.cr-pr-slug-link { cursor: pointer; }
+.cr-pr-slug-link:hover { color: var(--cr-accent); text-decoration: underline; }
+.cr-pr-slug-link:focus-visible { outline: 2px solid var(--cr-accent); outline-offset: 2px; text-decoration: underline; color: var(--cr-accent); }
 .cr-status-badge {
   font-size: 11px; padding: 2px 8px; border-radius: 10px;
   background: var(--cr-border-subtle); color: var(--cr-text-secondary);

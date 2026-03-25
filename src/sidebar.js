@@ -649,6 +649,9 @@ function Sidebar({ initialTab, onClose, onRerun }) {
     return html`<${EmptyState} icon="🐑" title="Waiting for review…" description="Click the OSShepherd button on any GitHub PR to start." />`;
   }
 
+  const prUrl = `https://github.com/${review.owner}/${review.repo}/pull/${review.prNumber}`;
+  const openPr = () => chrome.tabs.create({ url: prUrl });
+
   return html`
     <${SidebarContext.Provider} value=${ctx}>
       <div class="cr-resize-handle" />
@@ -657,7 +660,12 @@ function Sidebar({ initialTab, onClose, onRerun }) {
           <span class="cr-status-badge ${review.status || ''}">
             ${{ pending: 'Pending', reviewing: 'Reviewing…', complete: 'Complete', error: 'Error' }[review.status] || review.status}
           </span>
-          <span class="cr-pr-slug">${review.owner}/${review.repo}#${review.prNumber}</span>
+          <span class="cr-pr-slug cr-pr-slug-link"
+            role="link" tabIndex="0"
+            onClick=${openPr}
+            onKeyDown=${(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPr(); } }}>
+            ${review.owner}/${review.repo}#${review.prNumber}
+          </span>
         </div>
         <button class="cr-close" onClick=${onClose}>✕</button>
       </div>

@@ -12,6 +12,14 @@ const ERR = (...args) => console.error('[CR:offscreen]', ...args);
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'START_OFFSCREEN_REVIEW') {
+    // Primary trust check: sender.id must match this extension.
+    // We do NOT rely on sender.url here because Chrome may not set it for
+    // background service workers; sender.tab being present means it is a
+    // content script (always untrusted for this message type).
+    if (sender.id !== chrome.runtime.id || sender.tab) {
+      ERR('START_OFFSCREEN_REVIEW from unexpected sender — id:', sender.id, 'tab:', sender.tab?.id);
+      return false;
+    }
     const { owner, repo, prNumber } = request.payload;
     LOG(`Received START_OFFSCREEN_REVIEW for ${owner}/${repo}#${prNumber}`);
     handleOffscreenReview(request.payload)
