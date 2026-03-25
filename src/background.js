@@ -281,6 +281,7 @@ async function handleOAuthLogin() {
       const cleanupOAuth = () => {
         pendingOAuthTabId = null;
         chrome.tabs.onUpdated.removeListener(listener);
+        chrome.tabs.onRemoved.removeListener(onTabClosed);
       };
 
       const timeout = setTimeout(() => {
@@ -288,6 +289,14 @@ async function handleOAuthLogin() {
         chrome.tabs.remove(tabId).catch(() => {});
         reject(new Error('Login timed out after 5 minutes'));
       }, 5 * 60 * 1000);
+
+      const onTabClosed = (removedTabId) => {
+        if (removedTabId !== tabId) return;
+        clearTimeout(timeout);
+        cleanupOAuth();
+        reject(new Error('Login cancelled — the sign-in tab was closed.'));
+      };
+      chrome.tabs.onRemoved.addListener(onTabClosed);
 
       const listener = async (updatedTabId, changeInfo, tab) => {
         if (updatedTabId !== tabId) return;
