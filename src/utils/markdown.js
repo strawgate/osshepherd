@@ -10,7 +10,17 @@
 (function () {
   'use strict';
 
-  const BLOCK_HTML_RE = /^<\/?(details|summary|div|table|thead|tbody|tr|th|td|blockquote)\b/i;
+  const BLOCK_HTML_RE = /^<\/?(details|summary|table|thead|tbody|tr|th|td|blockquote)\b/i;
+
+  /** Strip event-handler and style attributes from a block-HTML line. */
+  function sanitizeBlockHtml(line) {
+    return line
+      .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '')
+      .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
+      .replace(/\s+on\w+\s*=\s*\S+/gi, '')
+      .replace(/\s+style\s*=\s*"[^"]*"/gi, '')
+      .replace(/\s+style\s*=\s*'[^']*'/gi, '');
+  }
 
   /** @param {string} str */
   function escapeHtml(str) {
@@ -49,9 +59,10 @@
     result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
     // 4. Links [text](url)
-    result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) =>
-      `<a href="${escapeAttr(url)}" target="_blank" rel="noopener">${text}</a>`
-    );
+    result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+      const safeUrl = /^javascript:/i.test(url.trim()) ? '#' : url;
+      return `<a href="${escapeAttr(safeUrl)}" target="_blank" rel="noopener">${text}</a>`;
+    });
 
     // 5. Restore code spans
     result = result.replace(/\x00C(\d+)\x00/g, (_, idx) => codeSpans[Number(idx)]);
@@ -119,7 +130,7 @@
 
       // --- Block-level HTML (details, summary, table, etc.) → pass through ---
       if (BLOCK_HTML_RE.test(trimmed)) {
-        out.push(line);
+        out.push(sanitizeBlockHtml(line));
         i++;
         continue;
       }
