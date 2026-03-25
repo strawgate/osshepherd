@@ -300,12 +300,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const completed = record.status !== 'complete'
       ? Object.assign({}, record, { status: 'complete', completedAt: record.completedAt || Date.now() })
       : record;
+    // Keep the terminal record in activeRecords so any late REVIEW_EVENTs that
+    // arrive before the save completes see the 'complete' status and are ignored,
+    // rather than re-triggering rehydration against the old 'reviewing' record.
     activeRecords.set(cacheKey, completed);
-    activeRecords.delete(cacheKey);
     lastEventTime.delete(cacheKey);
     chrome.alarms.clear(`stuck:${cacheKey}`);
     chrome.storage.session.remove(`stuck-tab:${cacheKey}`);
     ReviewStore.save(completed).then(() => {
+      activeRecords.delete(cacheKey); // safe to evict now — storage is the source of truth
       sendToTab(tabId, { type: 'REVIEW_UPDATE', payload: { complete: true } });
       updateBadge(tabId, completed);
     }).catch(err => ERR(`[${cacheKey}] Failed to save complete record:`, err));

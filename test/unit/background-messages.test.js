@@ -70,8 +70,13 @@ function buildBackgroundContext() {
   // Capture registered listeners
   const messageListeners = [];
 
+  const EXTENSION_ID = 'test-extension-id';
+  const EXTENSION_ORIGIN = `chrome-extension://${EXTENSION_ID}`;
+
   const fakeChrome = {
     runtime: {
+      id: EXTENSION_ID,
+      getURL: (path) => `${EXTENSION_ORIGIN}/${path}`,
       onMessage: { addListener: (fn) => messageListeners.push(fn) },
       onConnect: { addListener: () => {} },
       sendMessage: global.chrome.runtime.sendMessage,
@@ -135,7 +140,12 @@ function buildBackgroundContext() {
     return responses;
   }
 
-  return { ctx, triggerMessage, activeRecords, reviewStore };
+  // Helper: sender that passes isFromExtensionPage for a given page
+  function extensionSender(page) {
+    return { id: EXTENSION_ID, url: `${EXTENSION_ORIGIN}/${page}` };
+  }
+
+  return { ctx, triggerMessage, activeRecords, reviewStore, extensionSender, EXTENSION_ID, EXTENSION_ORIGIN };
 }
 
 // Wait for all pending microtasks / short async callbacks
@@ -153,20 +163,41 @@ describe('background.js — PING handler', () => {
 });
 
 describe('background.js — REVIEW_EVENT handler', () => {
-  it('exits cleanly when no active record exists', async () => {
+  it('rejects messages from unexpected senders', async () => {
     const { triggerMessage } = buildBackgroundContext();
+    // Sender with wrong extension id should be rejected
+    const responses = triggerMessage(
+      { type: 'REVIEW_EVENT', owner: 'acme', repo: 'api', prNumber: '42', tabId: 9, event: {} },
+      { id: 'evil-ext', url: 'chrome-extension://evil-ext/offscreen.html' }
+    );
+    await tick();
+    assert.equal(global.chrome.tabs.sendMessage.mock.calls.length, 0, 'should not forward rejected events');
+  });
+
+  it('rejects messages from content scripts (sender.tab present)', async () => {
+    const { triggerMessage } = buildBackgroundContext();
+    const responses = triggerMessage(
+      { type: 'REVIEW_EVENT', owner: 'acme', repo: 'api', prNumber: '42', tabId: 9, event: {} },
+      { id: 'test-extension-id', url: 'chrome-extension://test-extension-id/offscreen.html', tab: { id: 9 } }
+    );
+    await tick();
+    assert.equal(global.chrome.tabs.sendMessage.mock.calls.length, 0, 'content script sender should be rejected');
+  });
+
+  it('exits cleanly when no active record exists', async () => {
+    const { triggerMessage, extensionSender } = buildBackgroundContext();
     triggerMessage({
       type: 'REVIEW_EVENT',
       owner: 'acme', repo: 'api', prNumber: '42', tabId: 9,
       event: { type: 'review_comment', payload: { filename: 'src/foo.js' } },
-    });
+    }, extensionSender('offscreen.html'));
     await tick();
     // No crash = pass; chrome.tabs.sendMessage should NOT have been called
     assert.equal(global.chrome.tabs.sendMessage.mock.calls.length, 0);
   });
 
   it('calls ReviewStore.save and tabs.sendMessage when record exists', async () => {
-    const { ctx, triggerMessage, activeRecords } = buildBackgroundContext();
+    const { ctx, triggerMessage, activeRecords, extensionSender } = buildBackgroundContext();
 
     const record = ctx.ReviewStore.createRecord('acme', 'api', '42', 'rev-1');
     activeRecords.set('acme/api/42', record);
@@ -175,7 +206,7 @@ describe('background.js — REVIEW_EVENT handler', () => {
     triggerMessage({
       type: 'REVIEW_EVENT',
       owner: 'acme', repo: 'api', prNumber: '42', tabId: 9, event,
-    });
+    }, extensionSender('offscreen.html'));
 
     await tick();
 
@@ -188,7 +219,7 @@ describe('background.js — REVIEW_EVENT handler', () => {
   });
 
   it('updates activeRecords with the result of applyEvent', async () => {
-    const { ctx, triggerMessage, activeRecords } = buildBackgroundContext();
+    const { ctx, triggerMessage, activeRecords, extensionSender } = buildBackgroundContext();
 
     const record = ctx.ReviewStore.createRecord('acme', 'api', '99', 'rev-2');
     activeRecords.set('acme/api/99', record);
@@ -197,7 +228,7 @@ describe('background.js — REVIEW_EVENT handler', () => {
       type: 'REVIEW_EVENT',
       owner: 'acme', repo: 'api', prNumber: '99', tabId: 1,
       event: { type: 'review_completed', payload: { summary: 'LGTM' } },
-    });
+    }, extensionSender('offscreen.html'));
 
     await tick();
 
@@ -209,7 +240,7 @@ describe('background.js — REVIEW_EVENT handler', () => {
 
 describe('background.js — REVIEW_COMPLETE handler', () => {
   it('marks record complete, saves, removes from cache, notifies tab', async () => {
-    const { ctx, triggerMessage, activeRecords, reviewStore } = buildBackgroundContext();
+    const { ctx, triggerMessage, activeRecords, reviewStore, extensionSender } = buildBackgroundContext();
 
     const record = Object.assign(
       ctx.ReviewStore.createRecord('acme', 'api', '7', 'rev-3'),
@@ -220,7 +251,7 @@ describe('background.js — REVIEW_COMPLETE handler', () => {
     triggerMessage({
       type: 'REVIEW_COMPLETE',
       owner: 'acme', repo: 'api', prNumber: '7', tabId: 5,
-    });
+    }, extensionSender('offscreen.html'));
 
     await tick();
 
@@ -241,7 +272,7 @@ describe('background.js — REVIEW_COMPLETE handler', () => {
   });
 
   it('does not overwrite a pre-existing completedAt timestamp', async () => {
-    const { ctx, triggerMessage, activeRecords, reviewStore } = buildBackgroundContext();
+    const { ctx, triggerMessage, activeRecords, reviewStore, extensionSender } = buildBackgroundContext();
 
     const record = Object.assign(
       ctx.ReviewStore.createRecord('acme', 'api', '8', 'rev-4'),
@@ -252,7 +283,7 @@ describe('background.js — REVIEW_COMPLETE handler', () => {
     triggerMessage({
       type: 'REVIEW_COMPLETE',
       owner: 'acme', repo: 'api', prNumber: '8', tabId: 5,
-    });
+    }, extensionSender('offscreen.html'));
 
     await tick();
 
@@ -260,11 +291,32 @@ describe('background.js — REVIEW_COMPLETE handler', () => {
     assert.ok(saved, 'record not saved');
     assert.equal(saved.completedAt, 1000, 'completedAt must not be overwritten');
   });
+
+  it('rejects REVIEW_COMPLETE from unexpected sender', async () => {
+    const { ctx, triggerMessage, activeRecords, reviewStore } = buildBackgroundContext();
+
+    const record = Object.assign(
+      ctx.ReviewStore.createRecord('acme', 'api', '9', 'rev-x'),
+      { status: 'reviewing' }
+    );
+    activeRecords.set('acme/api/9', record);
+
+    triggerMessage({
+      type: 'REVIEW_COMPLETE',
+      owner: 'acme', repo: 'api', prNumber: '9', tabId: 5,
+    }, { id: 'evil-ext', url: 'chrome-extension://evil-ext/offscreen.html' });
+
+    await tick();
+
+    assert.equal(activeRecords.has('acme/api/9'), true, 'record must not be cleared by rejected sender');
+    assert.equal(reviewStore.has('reviews:acme/api/9'), false, 'must not save on rejected sender');
+    assert.equal(global.chrome.tabs.sendMessage.mock.calls.length, 0);
+  });
 });
 
 describe('background.js — REVIEW_ERROR handler', () => {
   it('marks record as error, saves, sends REVIEW_RESULT error to tab', async () => {
-    const { ctx, triggerMessage, activeRecords, reviewStore } = buildBackgroundContext();
+    const { ctx, triggerMessage, activeRecords, reviewStore, extensionSender } = buildBackgroundContext();
 
     const record = ctx.ReviewStore.createRecord('acme', 'api', '55', 'rev-5');
     activeRecords.set('acme/api/55', record);
@@ -273,7 +325,7 @@ describe('background.js — REVIEW_ERROR handler', () => {
       type: 'REVIEW_ERROR',
       owner: 'acme', repo: 'api', prNumber: '55', tabId: 3,
       message: 'WebSocket timeout',
-    });
+    }, extensionSender('offscreen.html'));
 
     await tick();
 
@@ -291,13 +343,13 @@ describe('background.js — REVIEW_ERROR handler', () => {
   });
 
   it('still saves an error record when there is no pre-existing active record', async () => {
-    const { triggerMessage, reviewStore } = buildBackgroundContext();
+    const { triggerMessage, reviewStore, extensionSender } = buildBackgroundContext();
 
     triggerMessage({
       type: 'REVIEW_ERROR',
       owner: 'acme', repo: 'api', prNumber: '404', tabId: 7,
       message: 'something blew up',
-    });
+    }, extensionSender('offscreen.html'));
 
     await tick();
 
