@@ -166,7 +166,7 @@ describe('background.js — REVIEW_EVENT handler', () => {
   it('rejects messages from unexpected senders', async () => {
     const { triggerMessage } = buildBackgroundContext();
     // Sender with wrong extension id should be rejected
-    const responses = triggerMessage(
+    triggerMessage(
       { type: 'REVIEW_EVENT', owner: 'acme', repo: 'api', prNumber: '42', tabId: 9, event: {} },
       { id: 'evil-ext', url: 'chrome-extension://evil-ext/offscreen.html' }
     );
@@ -176,7 +176,7 @@ describe('background.js — REVIEW_EVENT handler', () => {
 
   it('rejects messages from content scripts (sender.tab present)', async () => {
     const { triggerMessage, EXTENSION_ID, EXTENSION_ORIGIN } = buildBackgroundContext();
-    const responses = triggerMessage(
+    triggerMessage(
       { type: 'REVIEW_EVENT', owner: 'acme', repo: 'api', prNumber: '42', tabId: 9, event: {} },
       { id: EXTENSION_ID, url: `${EXTENSION_ORIGIN}/offscreen.html`, tab: { id: 9 } }
     );
