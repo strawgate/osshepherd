@@ -19,7 +19,8 @@
       .replace(/\s+on\w+\s*=\s*'[^']*'/gi, '')
       .replace(/\s+on\w+\s*=\s*\S+/gi, '')
       .replace(/\s+style\s*=\s*"[^"]*"/gi, '')
-      .replace(/\s+style\s*=\s*'[^']*'/gi, '');
+      .replace(/\s+style\s*=\s*'[^']*'/gi, '')
+      .replace(/\s+style\s*=\s*\S+/gi, '');
   }
 
   /** @param {string} str */
@@ -58,10 +59,11 @@
     // 3. Italic *text* (not inside bold)
     result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
-    // 4. Links [text](url)
+    // 4. Links [text](url) — allowlist safe schemes; block data:, vbscript:, etc.
     result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
-      const safeUrl = /^javascript:/i.test(url.trim()) ? '#' : url;
-      return `<a href="${escapeAttr(safeUrl)}" target="_blank" rel="noopener">${text}</a>`;
+      const t = url.trim();
+      const safe = /^(https?|mailto|tel|ftp):/i.test(t) || /^[/?#.]/.test(t) || t === '';
+      return `<a href="${escapeAttr(safe ? url : '')}" target="_blank" rel="noopener">${text}</a>`;
     });
 
     // 5. Restore code spans

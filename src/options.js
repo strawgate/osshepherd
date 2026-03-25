@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function refreshDebugInfo() {
     chrome.storage.local.get(null, (all) => {
       const info = {
-        accessToken: all.accessToken ? `[set, ${all.accessToken.length} chars]` : 'NOT SET',
+        accessToken: all.accessToken ? '[set]' : 'NOT SET',
         coderabbitToken: all.coderabbitToken ? '[set]' : 'NOT SET',
         userName: all.userName || 'NOT SET',
         organizationId: all.organizationId || 'NOT SET',
