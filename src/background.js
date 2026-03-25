@@ -171,20 +171,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'REQUEST_REVIEW') {
-    // Parse PR identity from the tab URL — don't trust the payload
-    const m = sender.tab?.url?.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
-    if (!m) { sendResponse({ success: false, error: 'Not a GitHub PR tab' }); return false; }
-    const [, owner, repo, prNumber] = m;
-    LOG(`REQUEST_REVIEW from tab ${sender.tab.id}: ${owner}/${repo}#${prNumber}`);
-    handleRequestReview({ owner, repo, prNumber }, sender.tab.id)
-      .then(res => {
-        LOG('handleRequestReview result:', JSON.stringify(res).substring(0, 80));
-        sendResponse({ success: true, data: res });
-      })
-      .catch(err => {
-        ERR('handleRequestReview threw:', err.message || err);
-        sendResponse({ success: false, error: err.message || String(err) });
+    const handleResult = (promise) => {
+      promise
+        .then(res => {
+          LOG('handleRequestReview result:', JSON.stringify(res).substring(0, 80));
+          sendResponse({ success: true, data: res });
+        })
+        .catch(err => {
+          ERR('handleRequestReview threw:', err.message || err);
+          sendResponse({ success: false, error: err.message || String(err) });
+        });
+    };
+
+    if (sender.tab?.url) {
+      // Content script: parse PR identity from the verified tab URL
+      const m = sender.tab.url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+      if (!m) { sendResponse({ success: false, error: 'Not a GitHub PR tab' }); return false; }
+      const [, owner, repo, prNumber] = m;
+      LOG(`REQUEST_REVIEW from tab ${sender.tab.id}: ${owner}/${repo}#${prNumber}`);
+      handleResult(handleRequestReview({ owner, repo, prNumber }, sender.tab.id));
+    } else {
+      // Side panel: look up the authoritative context from session storage
+      const tabId = request.payload?.tabId;
+      if (!tabId) { sendResponse({ success: false, error: 'Missing tabId' }); return false; }
+      chrome.storage.session.get(`sidepanel:context:${tabId}`, (result) => {
+        const ctx = result[`sidepanel:context:${tabId}`];
+        if (!ctx) { sendResponse({ success: false, error: 'No session context for tab' }); return; }
+        LOG(`REQUEST_REVIEW from sidepanel for tab ${tabId}: ${ctx.owner}/${ctx.repo}#${ctx.prNumber}`);
+        handleResult(handleRequestReview({ owner: ctx.owner, repo: ctx.repo, prNumber: ctx.prNumber }, tabId));
       });
+    }
     return true;
   }
 
