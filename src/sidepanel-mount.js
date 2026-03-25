@@ -55,6 +55,7 @@ async function navigateTab(pr, filename, startLine) {
 // ---------------------------------------------------------------------------
 
 let currentPR = null;
+let watchedTabId = null;
 
 async function init() {
   const tabId = await getCurrentTabId();
@@ -62,7 +63,12 @@ async function init() {
     showEmpty('Open a GitHub PR to see reviews.');
     return;
   }
+  watchedTabId = tabId;
 
+  await loadContext(tabId);
+}
+
+async function loadContext(tabId) {
   const ctx = await getPRContext(tabId);
   if (!ctx) {
     // No sidePanel context — try to find a review for this tab's URL
@@ -129,6 +135,17 @@ function mountApp(review, ctx) {
 // ---------------------------------------------------------------------------
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  // When the user navigates to a different PR and presses Review, the background
+  // writes a new session context. Reinitialize the panel for the new PR.
+  if (area === 'session' && watchedTabId) {
+    const ctxKey = `sidepanel:context:${watchedTabId}`;
+    if (changes[ctxKey]?.newValue) {
+      LOG(`Session context changed — reinitializing for new PR`);
+      loadContext(watchedTabId);
+      return;
+    }
+  }
+
   if (!currentPR) return;
   const key = ReviewStore.storageKey(currentPR.owner, currentPR.repo, currentPR.prNumber);
 

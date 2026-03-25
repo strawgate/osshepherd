@@ -63,7 +63,7 @@ function scheduleStuckCheck(cacheKey, tabId) {
     ReviewStore.save(errRecord).catch(err => ERR(`[${cacheKey}] Failed to save error record:`, err)).finally(() => {
       sendToTab(tabId, {
         type: 'REVIEW_RESULT',
-        payload: { status: 'error', message: 'Review failed to start — no response from CodeRabbit. Check your connection and try again.' }
+        payload: { status: 'error', message: `${cacheKey}: Review failed to start — no response from CodeRabbit. Check your connection and try again.` }
       });
     });
   }, FIRST_EVENT_TIMEOUT_MS);
@@ -116,7 +116,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (tabId) {
       sendToTab(tabId, {
         type: 'REVIEW_RESULT',
-        payload: { status: 'error', message: `Review timed out — no response for ${mins} minutes. Try re-running the review.` }
+        payload: { status: 'error', message: `${cacheKey}: Review timed out — no response for ${mins} minutes. Try re-running the review.` }
       });
     }
   });

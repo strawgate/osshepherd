@@ -30,7 +30,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://github.com/*/*/pull/*"],
+      "matches": ["https://github.com/*"],
       "js": ["utils/utils.js", "utils/review-store.js", "content.js"],
       "css": ["content.css"]
     }
