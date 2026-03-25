@@ -14,12 +14,16 @@
 
   const URL_ATTRS_RE = /href|src|action|formaction|background|poster|cite|ping/i;
 
-  /** Returns true if a URL is safe (https?, mailto, tel, ftp, relative, or data:image). */
+  // Explicit raster MIME types allowed in data: URLs. SVG is excluded because
+  // data:image/svg+xml can embed <script> and event-handler attributes.
+  const SAFE_DATA_IMAGE_RE = /^data:image\/(png|jpe?g|gif|webp);/i;
+
+  /** Returns true if a URL is safe (https?, mailto, tel, ftp, relative, or raster data:image). */
   function isSafeUrl(url) {
     const t = url.trim();
     return /^(https?|mailto|tel|ftp):/i.test(t) ||
            /^[/?#.]/.test(t) ||
-           /^data:image\//i.test(t) ||
+           SAFE_DATA_IMAGE_RE.test(t) ||
            t === '';
   }
 
@@ -75,6 +79,9 @@
     result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
     // 4. Links [text](url) — allowlist safe schemes; block data:, vbscript:, etc.
+    //    `text` is safe here: processInline is always called with escapeHtml()-pre-escaped input,
+    //    so user-supplied < > are entities. The only raw HTML in `text` at this step is
+    //    our own <strong>/<em>/<code> injections from steps 2-3 above (intentional, controlled).
     result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
       const t = url.trim();
       const safe = /^(https?|mailto|tel|ftp):/i.test(t) || /^[/?#.]/.test(t) || t === '';

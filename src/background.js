@@ -8,6 +8,8 @@ const ERR = (...args) => console.error('[CR:background]', ...args);
 // High-range ID avoids collisions with static rules (which use low IDs like 1)
 const DNR_DYNAMIC_RULE_ID = 1001;
 
+const GITHUB_PR_URL_REGEX = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/;
+
 // In-memory record cache keyed by "owner/repo/prNumber" for the active review session.
 // Avoids a storage read on every streaming event. The SW stays alive while events arrive.
 const activeRecords = new Map();
@@ -126,6 +128,15 @@ function updateBadge(tabId, review) {
   }
 }
 
+/**
+ * Returns true when a message sender is a specific extension page.
+ * sender.id is the primary trust check (same extension); sender.url narrows to the given page.
+ * Do not use for service-worker senders — Chrome may not set sender.url in that context.
+ */
+function isFromExtensionPage(sender, pagePath) {
+  return sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL(pagePath);
+}
+
 function sendToTab(tabId, message) {
   chrome.tabs.sendMessage(tabId, message, () => {
     if (chrome.runtime.lastError) {
@@ -149,7 +160,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const tabId = sender.tab?.id;
     if (!tabId) { sendResponse({ success: false, error: 'No tab' }); return false; }
     // Parse PR identity from the tab URL — don't trust the payload
-    const m = sender.tab?.url?.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+    const m = sender.tab?.url?.match(GITHUB_PR_URL_REGEX);
     if (!m) { sendResponse({ success: false, error: 'Not a GitHub PR tab' }); return false; }
     const [, owner, repo, prNumber] = m;
     // Store context so sidePanel knows which PR to display
@@ -164,8 +175,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'START_OAUTH_LOGIN') {
-    // sender.id (same extension) is the primary trust check; sender.url narrows to options page.
-    if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('options.html')) {
+    if (!isFromExtensionPage(sender, 'options.html')) {
       ERR('START_OAUTH_LOGIN from unexpected sender:', sender.url);
       sendResponse({ success: false, error: 'Unauthorized' });
       return false;
@@ -191,15 +201,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (sender.tab?.url) {
       // Content script: parse PR identity from the verified tab URL
-      const m = sender.tab.url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+      const m = sender.tab.url.match(GITHUB_PR_URL_REGEX);
       if (!m) { sendResponse({ success: false, error: 'Not a GitHub PR tab' }); return false; }
       const [, owner, repo, prNumber] = m;
       LOG(`REQUEST_REVIEW from tab ${sender.tab.id}: ${owner}/${repo}#${prNumber}`);
       handleResult(handleRequestReview({ owner, repo, prNumber }, sender.tab.id));
     } else {
       // Side panel: look up the authoritative context from session storage
-      // sender.id (same extension) is the primary trust check; sender.url narrows to sidepanel.
-      if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('sidepanel.html')) {
+      if (!isFromExtensionPage(sender, 'sidepanel.html')) {
         ERR('REQUEST_REVIEW (non-tab) from unexpected sender:', sender.url);
         sendResponse({ success: false, error: 'Unauthorized' });
         return false;
@@ -218,8 +227,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Streaming event from offscreen — save to storage and forward to tab
   if (request.type === 'REVIEW_EVENT' || request.type === 'REVIEW_COMPLETE' || request.type === 'REVIEW_ERROR') {
-    // sender.id (same extension) is the primary trust check; sender.url narrows to offscreen doc.
-    if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('offscreen.html')) {
+    if (!isFromExtensionPage(sender, 'offscreen.html')) {
       ERR(`${request.type} from unexpected sender:`, sender.url);
       return false;
     }
