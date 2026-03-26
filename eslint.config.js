@@ -113,6 +113,11 @@ module.exports = [
         // Cross-file globals: sidebar.js defines these, sidepanel-mount.js consumes them
         Sidebar: 'writable',
         reviewSignal: 'writable',
+        panelModeSignal: 'writable',
+        prSignal: 'writable',
+        actionableCountSignal: 'writable',
+        fileCountSignal: 'writable',
+        agentPromptSignal: 'writable',
         SidebarContext: 'writable',
         navigateToFileLine: 'writable',
       },
@@ -121,7 +126,7 @@ module.exports = [
       'no-undef': 'error',
       'no-unused-vars': ['error', {
         argsIgnorePattern: '^_',
-        varsIgnorePattern: '^(Sidebar|reviewSignal|SidebarContext|navigateToFileLine)$',
+        varsIgnorePattern: '^(Sidebar|reviewSignal|panelModeSignal|prSignal|actionableCountSignal|fileCountSignal|agentPromptSignal|SidebarContext|SignInPanel|ReviewPanel|navigateToFileLine)$',
       }],
     },
   },
@@ -171,6 +176,26 @@ module.exports = [
     languageOptions: {
       globals: {
         ...globals.node,
+      },
+    },
+    rules: {
+      'no-undef': 'error',
+    },
+  },
+
+  // ── E2E sidepanel tests — page.evaluate() uses extension globals ─────────
+  {
+    files: ['test/e2e/sidepanel.test.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...chromeGlobal,
+        // These are extension-page globals referenced inside page.evaluate() callbacks.
+        // ESLint can't see that they run in the browser, not Node.
+        ReviewStore: 'readonly',
+        reviewSignal: 'readonly',
+        panelModeSignal: 'readonly',
+        batch: 'readonly',
       },
     },
     rules: {

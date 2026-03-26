@@ -170,7 +170,7 @@ body { margin: 0; padding: 0; overflow: hidden; background: var(--cr-bg); color-
 /* Summary */
 .cr-pr-title { font-size: 15px; font-weight: 600; color: #e6edf3; margin: 0 0 12px; }
 .cr-pr-title-label {
-  display: inline-flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 4px;
   font-size: 10px; font-weight: 600; color: var(--cr-text-muted);
   text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 3px;
 }

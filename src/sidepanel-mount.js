@@ -1,12 +1,12 @@
 /**
  * sidepanel-mount.js — Bootstrap for the chrome.sidePanel page.
  *
- * Reads the current tab's PR context from chrome.storage.session,
- * loads the review from ReviewStore, renders the Preact sidebar,
- * and listens for storage changes to update reactively.
+ * Mounts the Preact Sidebar once, then drives all UI transitions through
+ * signals (panelModeSignal, reviewSignal).  No imperative DOM writes — the
+ * Preact tree owns #cr-app for its entire lifetime.
  */
 
-/* global html, render, ReviewStore, reviewSignal, Sidebar */
+/* global html, render, batch, ReviewStore, reviewSignal, panelModeSignal, Sidebar */
 
 const LOG = (...args) => console.log('[CR:sidepanel]', ...args);
 
@@ -51,110 +51,35 @@ async function navigateTab(pr, filename, startLine) {
 }
 
 // ---------------------------------------------------------------------------
-// Mount
+// State
 // ---------------------------------------------------------------------------
 
 let currentPR = null;
 let watchedTabId = null;
+let loadGeneration = 0; // guards against stale async loadContext completions
 
-async function init() {
-  const tabId = await getCurrentTabId();
-  if (!tabId) {
-    showEmpty('Open a GitHub PR to see reviews.');
-    return;
-  }
-  watchedTabId = tabId;
+// ---------------------------------------------------------------------------
+// Mount — one-time, never torn down
+// ---------------------------------------------------------------------------
 
-  await loadContext(tabId);
-}
-
-async function loadContext(tabId) {
-  const ctx = await getPRContext(tabId);
-  if (!ctx) {
-    showEmpty('Click "Start Review" on a GitHub PR.');
-    return;
-  }
-
-  // Check sign-in state before trying to show a review
-  const stored = await chrome.storage.local.get(['accessToken', 'coderabbitToken']);
-  const token = (stored.accessToken || stored.coderabbitToken || '').trim();
-  if (!token) {
-    showSignIn(ctx);
-    return;
-  }
-
-  currentPR = ctx;
-  LOG(`Loading review for ${ctx.owner}/${ctx.repo}#${ctx.prNumber}`);
-
-  const review = await ReviewStore.load(ctx.owner, ctx.repo, ctx.prNumber);
-  if (review) {
-    mountApp(review, ctx);
-  } else {
-    showEmpty('Review starting…');
-    // Will be updated via storage listener when events arrive
-    mountApp(ReviewStore.createRecord(ctx.owner, ctx.repo, ctx.prNumber, 'pending'), ctx);
-  }
-}
-
-function showSignIn(ctx) {
-  LOG(`Not signed in — showing sign-in prompt for ${ctx.owner}/${ctx.repo}#${ctx.prNumber}`);
-  const app = document.getElementById('cr-app');
-  app.innerHTML = '';
-  app.className = '';
-
-  const card = document.createElement('div');
-  card.className = 'cr-signin-card';
-  card.innerHTML = `
-    <div class="cr-signin-logo">🐑</div>
-    <h2 class="cr-signin-title">Sign in to CodeRabbit</h2>
-    <p class="cr-signin-desc">Sign in to start your AI review of<br>
-      <strong>${ctx.owner}/${ctx.repo}#${ctx.prNumber}</strong></p>
-    <button class="cr-signin-btn" id="crSignInBtn">Sign in with CodeRabbit</button>
-    <p class="cr-signin-status" id="crSignInStatus"></p>
-  `;
-  app.appendChild(card);
-
-  const btn = document.getElementById('crSignInBtn');
-  const status = document.getElementById('crSignInStatus');
-
-  btn.addEventListener('click', () => {
-    btn.disabled = true;
-    btn.textContent = 'Opening sign-in tab…';
-    status.textContent = 'Complete sign-in in the new tab — this panel will update automatically.';
-
-    chrome.runtime.sendMessage({ type: 'START_OAUTH_LOGIN' }, (response) => {
-      if (chrome.runtime.lastError || !response?.success) {
-        const msg = chrome.runtime.lastError?.message || response?.error || 'Sign-in failed';
-        btn.disabled = false;
-        btn.textContent = 'Sign in with CodeRabbit';
-        status.textContent = msg;
-        status.classList.add('cr-signin-status-error');
-      }
-      // On success the storage listener fires and triggers the review automatically
-    });
-  });
-}
-
-function showEmpty(message) {
-  document.getElementById('cr-app').innerHTML =
-    `<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#8b949e;font-family:-apple-system,sans-serif;font-size:13px;text-align:center;padding:20px">${message}</div>`;
-}
-
-function mountApp(review, ctx) {
+function mountOnce() {
   const mountTarget = document.getElementById('cr-app');
-  mountTarget.innerHTML = '';
   mountTarget.className = 'cr-sidebar';
-
-  reviewSignal.value = review;
 
   const onClose = () => {}; // Chrome manages panel visibility
   const onRerun = async () => {
     const r = reviewSignal.value;
     if (!r) return;
+    // Read the live tabId — the Preact tree persists across PR switches so
+    // the closure must not capture a stale context.
+    const tabId = watchedTabId;
     await ReviewStore.remove(r.owner, r.repo, r.prNumber);
-    reviewSignal.value = ReviewStore.createRecord(r.owner, r.repo, r.prNumber, 'pending');
+    batch(() => {
+      reviewSignal.value = ReviewStore.createRecord(r.owner, r.repo, r.prNumber, 'pending');
+      panelModeSignal.value = { mode: 'review' };
+    });
     chrome.runtime.sendMessage(
-      { type: 'REQUEST_REVIEW', payload: { tabId: ctx.tabId } },
+      { type: 'REQUEST_REVIEW', payload: { tabId } },
       (response) => {
         if (chrome.runtime.lastError || !response?.success) {
           const msg = chrome.runtime.lastError?.message || response?.error || 'Background not responding';
@@ -174,6 +99,58 @@ function mountApp(review, ctx) {
     html`<${Sidebar} initialTab="feedback" onClose=${onClose} onRerun=${onRerun} />`,
     mountTarget
   );
+}
+
+// ---------------------------------------------------------------------------
+// Context loading
+// ---------------------------------------------------------------------------
+
+async function init() {
+  const tabId = await getCurrentTabId();
+  if (!tabId) {
+    panelModeSignal.value = { mode: 'empty', message: 'Open a GitHub PR to see reviews.' };
+    return;
+  }
+  watchedTabId = tabId;
+  await loadContext(tabId);
+}
+
+async function loadContext(tabId) {
+  // Bump generation so any earlier in-flight loadContext becomes stale
+  const gen = ++loadGeneration;
+
+  // Immediately clear currentPR so the storage listener stops applying
+  // events from the OLD PR to the signal while we load the new context.
+  currentPR = null;
+
+  const ctx = await getPRContext(tabId);
+  if (gen !== loadGeneration) return; // superseded by a newer call
+  if (!ctx) {
+    panelModeSignal.value = { mode: 'empty', message: 'Click "Start Review" on a GitHub PR.' };
+    return;
+  }
+
+  // Check sign-in state before trying to show a review
+  const stored = await chrome.storage.local.get(['accessToken', 'coderabbitToken']);
+  const token = (stored.accessToken || stored.coderabbitToken || '').trim();
+  if (gen !== loadGeneration) return; // superseded
+  if (!token) {
+    panelModeSignal.value = { mode: 'signin', ctx };
+    return;
+  }
+
+  // Set currentPR BEFORE the ReviewStore.load so that storage events
+  // arriving for the new PR are correctly picked up by the listener.
+  currentPR = ctx;
+  LOG(`Loading review for ${ctx.owner}/${ctx.repo}#${ctx.prNumber}`);
+
+  const review = await ReviewStore.load(ctx.owner, ctx.repo, ctx.prNumber);
+  if (gen !== loadGeneration) return; // superseded
+
+  batch(() => {
+    reviewSignal.value = review || ReviewStore.createRecord(ctx.owner, ctx.repo, ctx.prNumber, 'pending');
+    panelModeSignal.value = { mode: 'review' };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +184,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
   if (area === 'local' && changes[key]) {
     const review = changes[key].newValue;
-    if (review) {
+    // Double-check the review actually belongs to the PR we're displaying
+    if (review && review.owner === currentPR.owner &&
+        review.repo === currentPR.repo &&
+        String(review.prNumber) === String(currentPR.prNumber)) {
       LOG(`Storage update for ${currentPR.owner}/${currentPR.repo}#${currentPR.prNumber} — status: ${review.status}`);
       reviewSignal.value = review;
     }
@@ -218,4 +198,5 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // Init
 // ---------------------------------------------------------------------------
 
+mountOnce();
 init();
