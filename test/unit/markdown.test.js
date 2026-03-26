@@ -115,8 +115,13 @@ describe('CRMarkdown.escapeHtml', () => {
     assert.equal(md.escapeHtml('<script>"&'), '&lt;script&gt;&quot;&amp;');
   });
 
-  it('handles empty/null input', () => {
+  it('returns empty string for empty input', () => {
     assert.equal(md.escapeHtml(''), '');
+  });
+
+  it('coerces null to the string "null" (no special handling)', () => {
+    // Note: this documents current behavior, not necessarily ideal behavior.
+    // escapeHtml calls String(val) which produces "null".
     assert.equal(md.escapeHtml(null), 'null');
   });
 });

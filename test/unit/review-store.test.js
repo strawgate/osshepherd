@@ -41,7 +41,7 @@ describe('storageKey', () => {
     assert.equal(ReviewStore.storageKey('owner', 'repo', '123'), 'reviews:owner/repo/123');
   });
 
-  it('coerces prNumber to string', () => {
+  it('works with numeric prNumber (implicit string conversion)', () => {
     assert.equal(ReviewStore.storageKey('a', 'b', 42), 'reviews:a/b/42');
   });
 });
@@ -209,17 +209,33 @@ describe('applyEvent — review_comment', () => {
     assert.equal(r2.comments[0].filename, 'foo.go');
   });
 
-  it('deduplicates by fingerprint', () => {
+  it('deduplicates by composite key (fingerprint + filename + startLine)', () => {
     let r = ReviewStore.createRecord('o', 'r', '1', 'id');
     r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-1' }) });
+    // Same fingerprint, same filename, same startLine → duplicate
     r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-1' }) });
     assert.equal(r.comments.length, 1);
+  });
+
+  it('same fingerprint but different file is NOT a duplicate', () => {
+    let r = ReviewStore.createRecord('o', 'r', '1', 'id');
+    r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-1' }) });
+    // Same fingerprint but different filename → not a duplicate (CodeRabbit reuses fingerprints)
+    r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-1', filename: 'bar.go' }) });
+    assert.equal(r.comments.length, 2);
+  });
+
+  it('same fingerprint and file but different line is NOT a duplicate', () => {
+    let r = ReviewStore.createRecord('o', 'r', '1', 'id');
+    r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-1', startLine: 10 }) });
+    r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-1', startLine: 20 }) });
+    assert.equal(r.comments.length, 2);
   });
 
   it('allows multiple comments with different fingerprints', () => {
     let r = ReviewStore.createRecord('o', 'r', '1', 'id');
     r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-1' }) });
-    r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-2', filename: 'bar.go' }) });
+    r = ReviewStore.applyEvent(r, { type: 'review_comment', payload: makeComment({ fingerprint: 'fp-2' }) });
     assert.equal(r.comments.length, 2);
   });
 

@@ -2,19 +2,31 @@ const { test, expect } = require('./fixtures');
 
 test('renders the header', async ({ context, extensionId }) => {
   const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(page.locator('.header-title')).toContainText('OSShepherd for CodeRabbit Reviews');
+  try {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect(page.locator('.header-title')).toContainText('OSShepherd for CodeRabbit Reviews');
+  } finally {
+    await page.close();
+  }
 });
 
 test('shows settings button', async ({ context, extensionId }) => {
   const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(page.locator('#optionsBtn')).toBeVisible();
+  try {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect(page.locator('#optionsBtn')).toBeVisible();
+  } finally {
+    await page.close();
+  }
 });
 
 test('shows empty state when no reviews exist', async ({ context, extensionId }) => {
   const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(page.locator('#reviewsList')).toBeVisible();
-  await expect(page.locator('.empty-icon')).toBeVisible({ timeout: 5000 });
+  try {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect(page.locator('#reviewsList')).toBeVisible();
+    await expect(page.locator('.empty-icon')).toBeVisible({ timeout: 5000 });
+  } finally {
+    await page.close();
+  }
 });

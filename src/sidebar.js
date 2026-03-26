@@ -7,7 +7,7 @@
  */
 
 /* global html, useState, useEffect, useCallback, useMemo, useContext,
-          useErrorBoundary, createContext, signal,
+          useErrorBoundary, createContext, signal, computed, batch,
           CRMarkdown */
 
 // ---------------------------------------------------------------------------
@@ -121,10 +121,35 @@ const SidebarContext = createContext({
 });
 
 // ---------------------------------------------------------------------------
-// Review signal — fine-grained reactivity for streaming updates
+// Signals — fine-grained reactivity for streaming updates
 // ---------------------------------------------------------------------------
 
 const reviewSignal = signal(null);
+
+/**
+ * Panel mode signal — drives which top-level view is shown.
+ *   { mode: 'empty',   message: string }
+ *   { mode: 'signin',  ctx: { owner, repo, prNumber } }
+ *   { mode: 'review' }                                     ← reviewSignal has the data
+ */
+const panelModeSignal = signal({ mode: 'empty', message: 'Open a GitHub PR to see reviews.' });
+
+// Derived signals — computed once per reviewSignal change, shared across all consumers.
+const prSignal = computed(() => {
+  const r = reviewSignal.value;
+  return r ? { owner: r.owner, repo: r.repo, prNumber: r.prNumber } : null;
+});
+const actionableCountSignal = computed(() =>
+  (reviewSignal.value?.comments || []).filter(c => c.severity !== 'none').length
+);
+const fileCountSignal = computed(() =>
+  Object.keys(reviewSignal.value?.fileSummaries || {}).length
+);
+const agentPromptSignal = computed(() => {
+  const summary = reviewSignal.value?.summary;
+  const meta = summary ? parseSummaryMeta(summary) : null;
+  return meta?.agentPrompt || null;
+});
 
 // ---------------------------------------------------------------------------
 // Navigation helper
@@ -149,6 +174,39 @@ function EmptyState({ icon, title, description }) {
       <div class="cr-empty-icon">${icon}</div>
       <div class="cr-empty-title">${title}</div>
       ${description && html`<div class="cr-empty-desc">${description}</div>`}
+    </div>
+  `;
+}
+
+function SignInPanel({ ctx }) {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+
+  const handleSignIn = useCallback(() => {
+    setBusy(true);
+    setStatus('Complete sign-in in the new tab \u2014 this panel will update automatically.');
+    setError(false);
+    chrome.runtime.sendMessage({ type: 'START_OAUTH_LOGIN' }, (response) => {
+      if (chrome.runtime.lastError || !response?.success) {
+        const msg = chrome.runtime.lastError?.message || response?.error || 'Sign-in failed';
+        setBusy(false);
+        setStatus(msg);
+        setError(true);
+      }
+    });
+  }, []);
+
+  return html`
+    <div class="cr-signin-card">
+      <div class="cr-signin-logo">\uD83D\uDC11</div>
+      <h2 class="cr-signin-title">Sign in to CodeRabbit</h2>
+      <p class="cr-signin-desc">Sign in to start your AI review of<br/>
+        <strong>${ctx.owner}/${ctx.repo}#${ctx.prNumber}</strong></p>
+      <button class="cr-signin-btn" disabled=${busy} onClick=${handleSignIn}>
+        ${busy ? 'Opening sign-in tab\u2026' : 'Sign in with CodeRabbit'}
+      </button>
+      ${status && html`<p class="cr-signin-status ${error ? 'cr-signin-status-error' : ''}">${status}</p>`}
     </div>
   `;
 }
@@ -628,33 +686,42 @@ function SetupPanel({ review }) {
 // ---------------------------------------------------------------------------
 
 /**
- * Root sidebar component.
+ * Top-level shell — reads panelModeSignal to switch between empty, sign-in, and review views.
+ * Mounted once by sidepanel-mount.js and never torn down.
+ */
+function Sidebar({ initialTab, onClose, onRerun }) {
+  const mode = panelModeSignal.value;
+
+  if (mode.mode === 'empty') {
+    return html`<${EmptyState} icon="\uD83D\uDC11" title=${mode.message} />`;
+  }
+  if (mode.mode === 'signin') {
+    return html`<${SignInPanel} ctx=${mode.ctx} />`;
+  }
+
+  return html`<${ReviewPanel} initialTab=${initialTab} onClose=${onClose} onRerun=${onRerun} />`;
+}
+
+/**
+ * Review panel — shown when panelModeSignal is 'review'.
  * Reads review data from reviewSignal (fine-grained reactivity).
  * Provides SidebarContext so children can navigate/switch tabs without prop drilling.
  */
-function Sidebar({ initialTab, onClose, onRerun }) {
+function ReviewPanel({ initialTab, onClose, onRerun }) {
   const review = reviewSignal.value;
   const [activeTab, setActiveTab] = useState(initialTab || 'feedback');
-  const pr = useMemo(
-    () => review ? { owner: review.owner, repo: review.repo, prNumber: review.prNumber } : null,
-    [review?.owner, review?.repo, review?.prNumber]
-  );
-  const actionableCount = useMemo(
-    () => (review?.comments || []).filter(c => c.severity !== 'none').length,
-    [review?.comments]
-  );
-  const agentPrompt = useMemo(() => {
-    const meta = review?.summary ? parseSummaryMeta(review.summary) : null;
-    return meta?.agentPrompt || null;
-  }, [review?.summary]);
-  const fileCount = useMemo(
-    () => Object.keys(review?.fileSummaries || {}).length,
-    [review?.fileSummaries]
-  );
+
+  // Read from computed signals — computed once per reviewSignal change,
+  // not per-render of this component.
+  const pr = prSignal.value;
+  const actionableCount = actionableCountSignal.value;
+  const agentPrompt = agentPromptSignal.value;
+  const fileCount = fileCountSignal.value;
 
   const onNavigate = useCallback((filename, line) => {
-    if (pr) navigateToFileLine(pr, filename, line);
-  }, [pr]);
+    const p = prSignal.value;
+    if (p) navigateToFileLine(p, filename, line);
+  }, []);
 
   const switchTab = useCallback((tab) => setActiveTab(tab), []);
 
@@ -721,5 +788,7 @@ function Sidebar({ initialTab, onClose, onRerun }) {
   `;
 }
 
-// Components and signals are available as globals for sidepanel-mount.js
+// Components and signals are available as globals for sidepanel-mount.js.
 // Mount logic is in sidepanel-mount.js (for chrome.sidePanel) — no shadow DOM.
+// Exported signals: reviewSignal, panelModeSignal, prSignal,
+//   actionableCountSignal, fileCountSignal, agentPromptSignal
