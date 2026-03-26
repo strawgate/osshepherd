@@ -8,7 +8,7 @@
 
 /* global html, useState, useEffect, useCallback, useMemo, useContext,
           useErrorBoundary, createContext, signal,
-          CRMarkdown, formatRelativeTime */
+          CRMarkdown */
 
 // ---------------------------------------------------------------------------
 // Error boundary — catches render errors and shows a fallback
@@ -186,29 +186,16 @@ const STAGES = ['setup', 'summarizing', 'reviewing', 'complete'];
 const STAGE_LABELS = { setup: 'Setup', summarizing: 'Summarize', reviewing: 'Review', complete: 'Done' };
 const STAGE_TABS = { setup: 'setup', summarizing: 'files', reviewing: 'feedback', complete: 'feedback' };
 
-function Toolbar({ review, onRerun }) {
-  const { onSwitchTab } = useContext(SidebarContext);
-  let stage = 'setup';
-  if (review.status === 'complete' || review.status === 'error') stage = 'complete';
-  else if (review.reviewStatus === 'summarizing') stage = 'summarizing';
-  else if (review.reviewStatus === 'reviewing') stage = 'reviewing';
-
-  const currentIdx = STAGES.indexOf(stage);
-  const isDone = review.status === 'complete' || review.status === 'error';
-  const ts = review.completedAt || review.startedAt;
-  const age = ts ? formatRelativeTime(ts) : '';
+function useStale(review) {
   const [stale, setStale] = useState(false);
-
   useEffect(() => {
-    // Reset stale when a new review starts
     if (review.status !== 'complete') { setStale(false); return; }
     if (!review.completedAt) return;
     let cancelled = false;
     (async () => {
       try {
-        const pr = { owner: review.owner, repo: review.repo, prNumber: review.prNumber };
         const resp = await fetch(
-          `https://api.github.com/repos/${pr.owner}/${pr.repo}/pulls/${pr.prNumber}/commits`,
+          `https://api.github.com/repos/${review.owner}/${review.repo}/pulls/${review.prNumber}/commits`,
           { headers: { Accept: 'application/vnd.github.v3+json' } }
         );
         if (!resp.ok || cancelled) return;
@@ -221,29 +208,33 @@ function Toolbar({ review, onRerun }) {
     })();
     return () => { cancelled = true; };
   }, [review.completedAt, review.owner, review.repo, review.prNumber, review.status]);
+  return stale;
+}
 
+function Toolbar({ review }) {
+  const { onSwitchTab } = useContext(SidebarContext);
+  let stage = 'setup';
+  if (review.status === 'complete' || review.status === 'error') stage = 'complete';
+  else if (review.reviewStatus === 'summarizing') stage = 'summarizing';
+  else if (review.reviewStatus === 'reviewing') stage = 'reviewing';
+
+  const isDone = review.status === 'complete' || review.status === 'error';
+  if (isDone) return null;
+
+  const currentIdx = STAGES.indexOf(stage);
   return html`
     <div class="cr-toolbar visible">
-      ${!isDone && html`
-        <div class="cr-toolbar-row tracker-row">
-          ${STAGES.map((s, idx) => html`
-            ${idx > 0 && html`<div class="cr-tracker-line ${idx <= currentIdx ? 'done' : ''}" />`}
-            <div
-              class="cr-tracker-step ${idx < currentIdx ? 'done' : idx === currentIdx ? 'active' : ''}"
-              onClick=${() => (idx <= currentIdx) && onSwitchTab(STAGE_TABS[s])}
-            >
-              <div class="cr-tracker-dot">✓</div>
-              <span>${STAGE_LABELS[s]}</span>
-            </div>
-          `)}
-        </div>
-      `}
-      <div class="cr-toolbar-row info-row">
-        <span class="cr-review-age">
-          ${isDone ? `Reviewed ${age}` : 'In progress…'}
-          ${stale && html`<span class="cr-review-stale"> outdated</span>`}
-        </span>
-        <button class="cr-rerun-btn" disabled=${!isDone} onClick=${onRerun}>↻ Re-run</button>
+      <div class="cr-toolbar-row tracker-row">
+        ${STAGES.map((s, idx) => html`
+          ${idx > 0 && html`<div class="cr-tracker-line ${idx <= currentIdx ? 'done' : ''}" />`}
+          <div
+            class="cr-tracker-step ${idx < currentIdx ? 'done' : idx === currentIdx ? 'active' : ''}"
+            onClick=${() => (idx <= currentIdx) && onSwitchTab(STAGE_TABS[s])}
+          >
+            <div class="cr-tracker-dot">✓</div>
+            <span>${STAGE_LABELS[s]}</span>
+          </div>
+        `)}
       </div>
     </div>
   `;
@@ -649,6 +640,8 @@ function Sidebar({ initialTab, onClose, onRerun }) {
     return html`<${EmptyState} icon="🐑" title="Waiting for review…" description="Click the OSShepherd button on any GitHub PR to start." />`;
   }
 
+  const isDone = review.status === 'complete' || review.status === 'error';
+  const stale = useStale(review);
   const prUrl = `https://github.com/${review.owner}/${review.repo}/pull/${review.prNumber}`;
   const openPr = () => chrome.tabs.create({ url: prUrl });
 
@@ -667,9 +660,14 @@ function Sidebar({ initialTab, onClose, onRerun }) {
             ${review.owner}/${review.repo}#${review.prNumber}
           </span>
         </div>
+        ${isDone && html`
+          <button class="cr-rerun-btn" onClick=${onRerun}>
+            ↻${stale ? ' Outdated' : ' Re-run'}
+          </button>
+        `}
         <button class="cr-close" onClick=${onClose}>✕</button>
       </div>
-      <${Toolbar} review=${review} onRerun=${onRerun} />
+      <${Toolbar} review=${review} />
       <${ReviewOverview} review=${review} />
       <div class="cr-tabs">
         ${['feedback', 'files', 'setup'].map(tab => html`
