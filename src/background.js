@@ -209,7 +209,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'START_OAUTH_LOGIN') {
-    if (!isFromExtensionPage(sender, 'options.html')) {
+    if (!isFromExtensionPage(sender, 'options.html') && !isFromExtensionPage(sender, 'sidepanel.html')) {
       ERR('START_OAUTH_LOGIN from unexpected sender:', sender.url);
       sendResponse({ success: false, error: 'Unauthorized' });
       return false;

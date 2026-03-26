@@ -185,12 +185,10 @@ async function handleReviewClick() {
         const msg = chrome.runtime.lastError?.message || response?.error || 'Unknown error';
         ERR('REQUEST_REVIEW failed:', msg);
         setFABState(btn, FAB_STATES.idle);
-        if (msg.includes('Not signed in')) {
-          showCrToast('Sign in Required', 'Opening OSShepherd settings…', 'error');
-          chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' });
-        } else {
+        if (!msg.includes('Not signed in')) {
           showCrToast('Review Failed', msg, 'error');
         }
+        // "Not signed in" is handled by the side panel's sign-in prompt — no toast needed
         return;
       }
       LOG('REQUEST_REVIEW response:', JSON.stringify(response.data).substring(0, 80));

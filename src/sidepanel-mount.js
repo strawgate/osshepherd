@@ -71,8 +71,15 @@ async function init() {
 async function loadContext(tabId) {
   const ctx = await getPRContext(tabId);
   if (!ctx) {
-    // No sidePanel context — try to find a review for this tab's URL
-    showEmpty('Click "Review with OSShepherd" on a GitHub PR.');
+    showEmpty('Click "Start Review" on a GitHub PR.');
+    return;
+  }
+
+  // Check sign-in state before trying to show a review
+  const stored = await chrome.storage.local.get(['accessToken', 'coderabbitToken']);
+  const token = (stored.accessToken || stored.coderabbitToken || '').trim();
+  if (!token) {
+    showSignIn(ctx);
     return;
   }
 
@@ -87,6 +94,45 @@ async function loadContext(tabId) {
     // Will be updated via storage listener when events arrive
     mountApp(ReviewStore.createRecord(ctx.owner, ctx.repo, ctx.prNumber, 'pending'), ctx);
   }
+}
+
+function showSignIn(ctx) {
+  LOG(`Not signed in — showing sign-in prompt for ${ctx.owner}/${ctx.repo}#${ctx.prNumber}`);
+  const app = document.getElementById('cr-app');
+  app.innerHTML = '';
+  app.className = '';
+
+  const card = document.createElement('div');
+  card.className = 'cr-signin-card';
+  card.innerHTML = `
+    <div class="cr-signin-logo">🐑</div>
+    <h2 class="cr-signin-title">Sign in to CodeRabbit</h2>
+    <p class="cr-signin-desc">Sign in to start your AI review of<br>
+      <strong>${ctx.owner}/${ctx.repo}#${ctx.prNumber}</strong></p>
+    <button class="cr-signin-btn" id="crSignInBtn">Sign in with CodeRabbit</button>
+    <p class="cr-signin-status" id="crSignInStatus"></p>
+  `;
+  app.appendChild(card);
+
+  const btn = document.getElementById('crSignInBtn');
+  const status = document.getElementById('crSignInStatus');
+
+  btn.addEventListener('click', () => {
+    btn.disabled = true;
+    btn.textContent = 'Opening sign-in tab…';
+    status.textContent = 'Complete sign-in in the new tab — this panel will update automatically.';
+
+    chrome.runtime.sendMessage({ type: 'START_OAUTH_LOGIN' }, (response) => {
+      if (chrome.runtime.lastError || !response?.success) {
+        const msg = chrome.runtime.lastError?.message || response?.error || 'Sign-in failed';
+        btn.disabled = false;
+        btn.textContent = 'Sign in with CodeRabbit';
+        status.textContent = msg;
+        status.classList.add('cr-signin-status-error');
+      }
+      // On success the storage listener fires and triggers the review automatically
+    });
+  });
 }
 
 function showEmpty(message) {
@@ -141,6 +187,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
     const ctxKey = `sidepanel:context:${watchedTabId}`;
     if (changes[ctxKey]?.newValue) {
       LOG(`Session context changed — reinitializing for new PR`);
+      loadContext(watchedTabId);
+      return;
+    }
+  }
+
+  // When the user completes sign-in, auto-trigger the review for the waiting PR.
+  if (area === 'local' && (changes.accessToken || changes.coderabbitToken)) {
+    const token = changes.accessToken?.newValue || changes.coderabbitToken?.newValue;
+    if (token && !currentPR && watchedTabId) {
+      LOG(`Sign-in detected — triggering review`);
       loadContext(watchedTabId);
       return;
     }
