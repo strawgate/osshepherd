@@ -5,7 +5,7 @@
 <h1 align="center">OSShepherd for CodeRabbit™</h1>
 
 <p align="center">
-  <strong>One-click AI code reviews on any GitHub PR (even in repositories without CodeRabbit — right in your browser.</strong><br>
+  <strong>One-click AI code reviews on any GitHub PR (even in repositories without CodeRabbit) — right in your browser.</strong><br>
   Trigger <a href="https://coderabbit.ai">CodeRabbit</a> reviews, triage findings by severity, and jump straight to the code.
 </p>
 
